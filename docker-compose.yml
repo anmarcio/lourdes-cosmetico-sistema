@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: lourdes-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lourdes
+      POSTGRES_USER: lourdes
+      POSTGRES_PASSWORD: lourdes_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+volumes:
+  postgres_data:
