@@ -30,7 +30,8 @@ app.get('/api/products', async (_req, res) => {
       p.price,
       p.stock_quantity,
       p.minimum_stock,
-      p.active
+      p.active,
+      p.image_url
     FROM products p
     LEFT JOIN suppliers s ON s.id = p.supplier_id
     ORDER BY p.name

@@ -43,6 +43,8 @@ function App() {
   <Suppliers />
 ) : tab === 'Serviços' ? (
   <Services />
+) : tab === 'Vitrine virtual' ? (
+  <Storefront />
 ) : (
   <Placeholder title={tab}/>
 )}
@@ -56,7 +58,147 @@ function Dashboard({products, low, loading}:{products:Product[];low:Product[];lo
   <div className="panel"><div className="panel-title"><h3>Estoque</h3><span>Visão inicial</span></div>{loading?<p>Carregando...</p>:<table><thead><tr><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Status</th></tr></thead><tbody>{products.map(p=><tr key={p.id}><td>{p.sku}</td><td><b>{p.name}</b></td><td>{p.category??'—'}</td><td>R$ {Number(p.price).toFixed(2).replace('.',',')}</td><td>{p.stock_quantity}</td><td><span className={p.stock_quantity<=p.minimum_stock?'badge danger':'badge'}>{p.stock_quantity<=p.minimum_stock?'Repor':'Normal'}</span></td></tr>)}</tbody></table>}</div>
   </section>
 }
-function Card({icon,label,value,warn=false}:{icon:React.ReactNode;label:string;value:string;warn?:boolean}) { return <div className={warn?'card warn':'card'}><div className="icon">{icon}</div><span>{label}</span><strong>{value}</strong></div> }
+function Card({icon,label,value,warn=false}:{icon:React.ReactNode;label:string;value:string;warn?:boolean}) { 
+  return <div className={warn?'card warn':'card'}><div className="icon">{icon}</div><span>{label}</span><strong>{value}</strong></div> }
+  
+function Storefront() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const response = await fetch(
+          `${API}/public/products`
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || 'Erro ao carregar produtos'
+          );
+        }
+
+        setProducts(data);
+
+      } catch (error) {
+        console.error(error);
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : 'Erro ao carregar produtos.'
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProducts();
+  }, []);
+
+  return (
+    <section>
+      <div className="hero">
+        <div>
+          <span className="eyebrow">
+            LOJA ONLINE
+          </span>
+
+          <h2>
+            Produtos Lourdes
+          </h2>
+
+          <p>
+            Consulte nossos produtos e solicite sua compra pelo WhatsApp.
+          </p>
+        </div>
+
+        <div className="hero-card">
+          <Store />
+
+          <b>
+            Atendimento via WhatsApp
+          </b>
+
+          <span>
+            Consulte disponibilidade e faça sua solicitação.
+          </span>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-title">
+          <h3>
+            Produtos disponíveis
+          </h3>
+
+          <span>
+            {products.length} produto(s)
+          </span>
+        </div>
+
+        {loading ? (
+          <p>
+            Carregando produtos...
+          </p>
+        ) : error ? (
+          <p>
+            {error}
+          </p>
+        ) : products.length === 0 ? (
+          <p>
+            Nenhum produto disponível.
+          </p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Produto</th>
+                <th>Categoria</th>
+                <th>Preço</th>
+                <th>Disponibilidade</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {products.map(product => (
+                <tr key={product.id}>
+                  <td>
+                    <b>
+                      {product.name}
+                    </b>
+                  </td>
+
+                  <td>
+                    {product.category ?? '—'}
+                  </td>
+
+                  <td>
+                    R$ {Number(product.price)
+                      .toFixed(2)
+                      .replace('.', ',')}
+                  </td>
+
+                  <td>
+                    <span className="badge">
+                      Disponível
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function Products({products,onCreated}:{products:Product[];onCreated:()=>void}) { 
   const [open,setOpen]=useState(false); 
