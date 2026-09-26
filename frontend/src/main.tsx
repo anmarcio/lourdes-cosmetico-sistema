@@ -1552,9 +1552,13 @@ function Suppliers() {
       </div>
 
       {open && (
-        <SupplierForm
-          close={() => setOpen(false)}
-          done={loadSuppliers}
+        <ServiceForm
+          close={() => {
+            setOpen(false);
+            setEditingService(null);
+          }}
+          done={loadServices}
+          service={editingService}
         />
       )}
 
@@ -1681,6 +1685,7 @@ function Services() {
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editingService, setEditingService] = useState<any | null>(null);
 
   const loadServices = () => {
     setLoading(true);
@@ -1696,6 +1701,36 @@ function Services() {
         setLoading(false);
       });
   };
+
+  const toggleServiceStatus = async (service: any) => {
+  try {
+    const response = await fetch(
+      `${API}/services/${service.id}/status`,
+      {
+        method: 'PATCH'
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || 'Erro ao alterar status do serviço'
+      );
+    }
+
+    await loadServices();
+
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : 'Erro ao alterar status do serviço.'
+    );
+  }
+};
 
   useEffect(() => {
     loadServices();
@@ -1719,8 +1754,12 @@ function Services() {
 
       {open && (
         <ServiceForm
-          close={() => setOpen(false)}
+          close={() => {
+            setOpen(false);
+            setEditingService(null);
+          }}
           done={loadServices}
+          service={editingService}
         />
       )}
 
@@ -1745,6 +1784,7 @@ function Services() {
                 <th>Descrição</th>
                 <th>Preço</th>
                 <th>Status</th>
+                <th>Ações</th>
               </tr>
             </thead>
 
@@ -1768,16 +1808,30 @@ function Services() {
 
                   <td>
                     <span
-                      className={
-                        service.active
-                          ? 'badge'
-                          : 'badge danger'
-                      }
-                    >
-                      {service.active
-                        ? 'Ativo'
-                        : 'Inativo'}
+                      className={service.active ? 'badge' : 'badge danger'}>
+                      {service.active ? 'Ativo' : 'Inativo'}
                     </span>
+                  </td>
+                  <td>
+                    <td>
+                    <button
+                      className="outline"
+                      onClick={() => {
+                        setEditingService(service);
+                        setOpen(true);
+                      }}
+                    >
+                      Editar
+                    </button>
+
+                    <button
+                      className="outline"
+                      style={{ marginLeft: '8px' }}
+                      onClick={() => toggleServiceStatus(service)}
+                    >
+                      {service.active ? 'Inativar' : 'Ativar'}
+                    </button>
+                  </td>
                   </td>
                 </tr>
               ))}
@@ -1791,11 +1845,13 @@ function Services() {
 
 function ServiceForm({
   close,
-  done
-}: {
+  done,
+  service
+ }: {
   close: () => void;
   done: () => void;
-}) {
+  service?: any | null;
+ }) {
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -1805,6 +1861,24 @@ function ServiceForm({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+  if (service) {
+    setForm({
+      name: service.name ?? '',
+      description: service.description ?? '',
+      price: service.price != null
+        ? String(service.price)
+        : ''
+    });
+  } else {
+    setForm({
+      name: '',
+      description: '',
+      price: ''
+    });
+  }
+ }, [service]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1825,8 +1899,15 @@ function ServiceForm({
     setSaving(true);
 
     try {
-      const response = await fetch(`${API}/services`, {
-        method: 'POST',
+      const response = await fetch(
+        service
+    ? `${API}/services/${service.id}`
+    : `${API}/services`,
+  {
+    method: service ? 'PUT' : 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
         headers: {
           'Content-Type': 'application/json'
         },
@@ -1845,7 +1926,11 @@ function ServiceForm({
         );
       }
 
-      setMessage('Serviço cadastrado com sucesso.');
+      setMessage(
+      service
+        ? 'Serviço atualizado com sucesso.'
+        : 'Serviço cadastrado com sucesso.'
+      );
 
       setForm({
         name: '',
@@ -1872,7 +1957,7 @@ function ServiceForm({
   return (
     <div className="panel">
       <div className="panel-title">
-        <h3>Novo serviço</h3>
+        <h3>{service ? 'Editar serviço' : 'Novo serviço'}</h3>
       </div>
 
       <form className="form" onSubmit={submit}>
@@ -1937,7 +2022,9 @@ function ServiceForm({
           >
             {saving
               ? 'Salvando...'
-              : 'Salvar serviço'}
+              : service
+                ? 'Salvar alterações'
+                : 'Salvar serviço'}
           </button>
         </div>
       </form>

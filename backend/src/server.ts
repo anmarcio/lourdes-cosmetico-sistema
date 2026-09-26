@@ -162,6 +162,101 @@ app.post('/api/services', async (req, res) => {
   }
 });
 
+app.put('/api/services/:id', async (req, res) => {
+  try {
+    const serviceId = Number(req.params.id);
+    const { name, description, price } = req.body;
+
+    if (!Number.isInteger(serviceId) || serviceId <= 0) {
+      return res.status(400).json({
+        error: 'ID do serviço inválido'
+      });
+    }
+
+    if (!name) {
+      return res.status(400).json({
+        error: 'Nome do serviço é obrigatório'
+      });
+    }
+
+    const { rows } = await pool.query(`
+      UPDATE services
+      SET
+        name = $1,
+        description = $2,
+        price = $3
+      WHERE id = $4
+      RETURNING
+        id,
+        name,
+        description,
+        price,
+        active,
+        created_at
+    `, [
+      name,
+      description ?? null,
+      price ?? 0,
+      serviceId
+    ]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Serviço não encontrado'
+      });
+    }
+
+    res.json(rows[0]);
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erro ao atualizar serviço'
+    });
+  }
+});
+
+app.patch('/api/services/:id/status', async (req, res) => {
+  try {
+    const serviceId = Number(req.params.id);
+
+    if (!Number.isInteger(serviceId) || serviceId <= 0) {
+      return res.status(400).json({
+        error: 'ID do serviço inválido'
+      });
+    }
+
+    const { rows } = await pool.query(`
+      UPDATE services
+      SET active = NOT active
+      WHERE id = $1
+      RETURNING
+        id,
+        name,
+        description,
+        price,
+        active,
+        created_at
+    `, [serviceId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Serviço não encontrado'
+      });
+    }
+
+    res.json(rows[0]);
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erro ao alterar status do serviço'
+    });
+  }
+});
+
 app.get('/api/customers', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
