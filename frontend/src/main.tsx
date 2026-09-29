@@ -60,7 +60,7 @@ function Dashboard({products, low, loading}:{products:Product[];low:Product[];lo
 }
 function Card({icon,label,value,warn=false}:{icon:React.ReactNode;label:string;value:string;warn?:boolean}) { 
   return <div className={warn?'card warn':'card'}><div className="icon">{icon}</div><span>{label}</span><strong>{value}</strong></div> }
-  
+
 function Storefront() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,11 +169,42 @@ function Storefront() {
             <tbody>
               {products.map(product => (
                 <tr key={product.id}>
+                  
                   <td>
-                    <b>
-                      {product.name}
-                    </b>
-                  </td>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    {product.image_url ? (
+      <img
+        src={`${API.replace('/api', '')}${product.image_url}`}
+        alt={product.name}
+        style={{
+          width: '60px',
+          height: '60px',
+          objectFit: 'cover',
+          borderRadius: '8px'
+        }}
+      />
+    ) : (
+      <div
+        style={{
+          width: '60px',
+          height: '60px',
+          borderRadius: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#f1f1f1',
+          fontSize: '12px'
+        }}
+      >
+        Sem foto
+      </div>
+    )}
+
+    <b>
+      {product.name}
+    </b>
+  </div>
+</td>
 
                   <td>
                     {product.category ?? '—'}
@@ -253,10 +284,11 @@ function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
   price:'',
   stockQuantity:'0',
   minimumStock:'0'
-});
+ });
 
   const [categories, setCategories] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [image, setImage] = useState<File | null>(null);
 
   useEffect(() => {
     fetch(`${API}/categories`)
@@ -272,22 +304,39 @@ function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
     .catch(error => console.error('Erro ao carregar fornecedores:', error));
   }, []);
 
-  const submit=async(e:React.FormEvent)=>{
+  const submit = async (e: React.FormEvent) => {
   e.preventDefault();
 
-  await fetch(`${API}/products`,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      ...form,
-      supplierId: form.supplierId
-        ? Number(form.supplierId)
-        : null,
-      price:Number(form.price),
-      stockQuantity:Number(form.stockQuantity),
-      minimumStock:Number(form.minimumStock)
-    })
+  const formData = new FormData();
+
+  formData.append('name', form.name);
+  formData.append('category', form.category);
+  formData.append(
+    'supplierId',
+    form.supplierId ? form.supplierId : ''
+  );
+  formData.append('price', form.price);
+  formData.append('stockQuantity', form.stockQuantity);
+  formData.append('minimumStock', form.minimumStock);
+
+  if (image) {
+    formData.append('image', image);
+  }
+
+  const response = await fetch(`${API}/products`, {
+    method: 'POST',
+    body: formData
   });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+
+    window.alert(
+      data?.error || 'Não foi possível cadastrar o produto.'
+    );
+
+    return;
+  }
 
   close();
   done();
@@ -302,6 +351,12 @@ function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
         placeholder="Nome"
         value={form.name}
         onChange={e=>setForm({...form,name:e.target.value})}
+      />
+
+      <input
+        type="file"
+        accept="image/*"
+        onChange={e => setImage(e.target.files?.[0] ?? null)}
       />
 
       <select

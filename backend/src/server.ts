@@ -1,14 +1,35 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import multer from 'multer';
 import { Pool } from 'pg';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, path.join(process.cwd(), 'uploads', 'products'));
+  },
+  filename: (_req, file, cb) => {
+    const extension = path.extname(file.originalname);
+    const fileName = `${Date.now()}${extension}`;
+    cb(null, fileName);
+  }
+});
+
+const upload = multer({
+  storage
+});
+
 app.use(cors({ origin: process.env.CORS_ORIGIN ?? 'http://localhost:5174' }));
-app.use(express.json());
+
+app.use(
+  '/uploads',
+  express.static(path.join(process.cwd(), 'uploads'))
+);
 
 app.get('/api/health', async (_req, res) => {
   try {
@@ -306,51 +327,150 @@ app.post('/api/customers', async (req, res) => {
   }
 });
 
-app.post('/api/products', async (req, res) => {
-  const { name,  category,  supplierId,  price,  stockQuantity = 0,  minimumStock = 0} = req.body;
+app.post('/api/products', upload.single('image'), async (req, res) => {
+  const {
+    name,
+    category,
+    supplierId,
+    price,
+    stockQuantity = 0,
+    minimumStock = 0
+  } = req.body;
+
+  if (!name || price == null) {
+    return res.status(400).json({
+      error: 'name e price são obrigatórios'
+    });
+  }
+
+  const imageUrl = req.file
+    ? `/uploads/products/${req.file.filename}`
+    : null;
+
+  const { rows } = await pool.query(`
+    INSERT INTO products (
+      sku,
+      name,
+      category,
+      supplier_id,
+      price,
+      stock_quantity,
+      minimum_stock,
+      image_url
+    )
+    SELECT
+      'LOR-' || LPAD(
+        (COALESCE(MAX(
+          CASE
+            WHEN sku LIKE 'LOR-%'
+            THEN CAST(SUBSTRING(sku FROM 5) AS INTEGER)
+          END
+        ), 0) + 1)::TEXT,
+        3,
+        '0'
+      ),
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6,
+      $7
+    FROM products
+    RETURNING *
+  `, [
+    name,
+    category ?? null,
+    supplierId ? Number(supplierId) : null,
+    price,
+    stockQuantity,
+    minimumStock,
+    imageUrl
+  ]);
+
+  res.status(201).json(rows[0]);
+});
+
+app.put('/api/products/:id', upload.single('image'), async (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+
+    const {
+      name,
+      category,
+      supplierId,
+      price,
+      stockQuantity,
+      minimumStock
+    } = req.body;
+
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return res.status(400).json({
+        error: 'ID do produto inválido'
+      });
+    }
+
     if (!name || price == null) {
-     return res.status(400).json({ error: 'name e price são obrigatórios' });
-}; 
+      return res.status(400).json({
+        error: 'name e price são obrigatórios'
+      });
+    }
 
-const { rows } = await pool.query(`
-  INSERT INTO products (
-  sku,
-  name,
-  category,
-  supplier_id,
-  price,
-  stock_quantity,
-  minimum_stock
-)
-  SELECT
-    'LOR-' || LPAD(
-      (COALESCE(MAX(
-        CASE
-          WHEN sku LIKE 'LOR-%'
-          THEN CAST(SUBSTRING(sku FROM 5) AS INTEGER)
-        END
-      ), 0) + 1)::TEXT,
-      3,
-      '0'
-    ),
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6
-  FROM products
-  RETURNING *
-`, [
-  name,
-  category ?? null,
-  supplierId ? Number(supplierId) : null,
-  price,
-  stockQuantity,
-  minimumStock
-]);
+    let query = `
+      UPDATE products
+      SET
+        name = $1,
+        category = $2,
+        supplier_id = $3,
+        price = $4,
+        stock_quantity = $5,
+        minimum_stock = $6,
+        updated_at = NOW()
+    `;
 
-res.status(201).json(rows[0]);
+    const values: any[] = [
+      name,
+      category || null,
+      supplierId ? Number(supplierId) : null,
+      Number(price),
+      Number(stockQuantity ?? 0),
+      Number(minimumStock ?? 0)
+    ];
+
+    if (req.file) {
+      const imageUrl = `/uploads/products/${req.file.filename}`;
+
+      query += `,
+        image_url = $7
+      `;
+
+      values.push(imageUrl);
+    }
+
+    query += `
+      WHERE id = $${values.length + 1}
+      RETURNING *
+    `;
+
+    values.push(productId);
+
+    const { rows } = await pool.query(query, values);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Produto não encontrado'
+      });
+    }
+
+    res.json(rows[0]);
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erro ao atualizar produto'
+    });
+  }
 });
 
 app.get('/api/stock/alerts', async (_req, res) => {
@@ -844,9 +964,18 @@ app.get('/api/sales/:id', async (req, res) => {
 
 app.get('/api/public/products', async (_req, res) => {
   const { rows } = await pool.query(`
-    SELECT id, name, category, price, stock_quantity
-    FROM products WHERE active = TRUE ORDER BY name
+    SELECT
+      id,
+      name,
+      category,
+      price,
+      stock_quantity,
+      image_url
+    FROM products
+    WHERE active = TRUE
+    ORDER BY name
   `);
+
   res.json(rows);
 });
 
