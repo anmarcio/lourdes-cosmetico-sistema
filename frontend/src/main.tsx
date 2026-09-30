@@ -231,52 +231,128 @@ function Storefront() {
   );
 }
 
-function Products({products,onCreated}:{products:Product[];onCreated:()=>void}) { 
-  const [open,setOpen]=useState(false); 
+function Products({ products,
+  onCreated
+}: {
+  products: Product[];
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  return <section>
-    <div className="toolbar">
-      <p>Cadastro centralizado de produtos e preços.</p>
-      <button onClick={()=>setOpen(true)}>
-        <Plus size={16}/> Novo produto
-      </button>
-    </div>
+  const handleNewProduct = () => {
+    setEditingProduct(null);
+    setOpen(true);
+  };
 
-    {open&&<ProductForm close={()=>setOpen(false)} done={onCreated}/>}
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setOpen(true);
+  };
 
-    <div className="panel">
-      <table>
-        <thead>
-          <tr>
-            <th>SKU</th>
-            <th>Produto</th>
-            <th>Fornecedor</th>
-            <th>Categoria</th>
-            <th>Preço</th>
-            <th>Estoque</th>
-            <th>Mínimo</th>
-          </tr>
-        </thead>
+  const handleClose = () => {
+    setOpen(false);
+    setEditingProduct(null);
+  };
 
-        <tbody>
-          {products.map(p=>
-            <tr key={p.id}>
-              <td>{p.sku}</td>
-              <td>{p.name}</td>
-              <td>{p.supplier_name??'—'}</td>
-              <td>{p.category??'—'}</td>
-              <td>R$ {Number(p.price).toFixed(2).replace('.',',')}</td>
-              <td>{p.stock_quantity}</td>
-              <td>{p.minimum_stock}</td>
+  const filteredProducts = products.filter(p => {
+  const term = search.toLowerCase().trim();
+
+  if (!term) return true;
+
+  return (
+    p.name?.toLowerCase().includes(term) ||
+    p.sku?.toLowerCase().includes(term) ||
+    p.category?.toLowerCase().includes(term) ||
+    p.supplier_name?.toLowerCase().includes(term)
+    );
+  });
+
+  return (
+    <section>
+      <div className="toolbar">
+        <p>Cadastro centralizado de produtos e preços.</p>
+
+        <input
+          type="text"
+          placeholder="Pesquisar produto, SKU ou categoria..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        <button onClick={handleNewProduct}>
+          <Plus size={16} /> Novo produto
+        </button>
+      </div>
+
+      {open && (
+        <ProductForm
+          product={editingProduct}
+          close={handleClose}
+          done={onCreated}
+        />
+      )}
+
+      <div className="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Produto</th>
+              <th>Fornecedor</th>
+              <th>Categoria</th>
+              <th>Preço</th>
+              <th>Estoque</th>
+              <th>Mínimo</th>
+              <th>Ações</th>
             </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  </section> 
+          </thead>
+
+          <tbody>
+            {filteredProducts.map(p => (
+              <tr key={p.id}>
+                <td>{p.sku}</td>
+                <td>{p.name}</td>
+                <td>{p.supplier_name ?? '—'}</td>
+                <td>{p.category ?? '—'}</td>
+
+                <td>
+                  R$ {Number(p.price).toFixed(2).replace('.', ',')}
+                </td>
+
+                <td>{p.stock_quantity}</td>
+
+                <td>{p.minimum_stock}</td>
+
+                <td>
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => handleEditProduct(p)}
+                  >
+                    Editar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
-function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
+function ProductForm({
+  close,
+  done,
+  product
+ }: {
+  close: () => void;
+  done: () => void;
+  product?: Product | null;
+ }) {
+
   const [form,setForm]=useState({
   name:'',
   category:'',
@@ -289,6 +365,32 @@ function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
   const [categories, setCategories] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [image, setImage] = useState<File | null>(null);
+
+   useEffect(() => {
+  if (product) {
+    setForm({
+      name: product.name ?? '',
+      category: product.category ?? '',
+      supplierId: '',
+      price: product.price != null
+        ? String(product.price)
+        : '',
+      stockQuantity: String(product.stock_quantity ?? 0),
+      minimumStock: String(product.minimum_stock ?? 0)
+    });
+  } else {
+    setForm({
+      name: '',
+      category: '',
+      supplierId: '',
+      price: '',
+      stockQuantity: '0',
+      minimumStock: '0'
+    });
+  }
+
+  setImage(null);
+}, [product]);
 
   useEffect(() => {
     fetch(`${API}/categories`)
@@ -304,7 +406,7 @@ function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
     .catch(error => console.error('Erro ao carregar fornecedores:', error));
   }, []);
 
-  const submit = async (e: React.FormEvent) => {
+const submit = async (e: React.FormEvent) => {
   e.preventDefault();
 
   const formData = new FormData();
@@ -323,16 +425,24 @@ function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
     formData.append('image', image);
   }
 
-  const response = await fetch(`${API}/products`, {
-    method: 'POST',
-    body: formData
-  });
+  const response = await fetch(
+    product
+      ? `${API}/products/${product.id}`
+      : `${API}/products`,
+    {
+      method: product ? 'PUT' : 'POST',
+      body: formData
+    }
+  );
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
 
     window.alert(
-      data?.error || 'Não foi possível cadastrar o produto.'
+      data?.error ||
+      (product
+        ? 'Não foi possível atualizar o produto.'
+        : 'Não foi possível cadastrar o produto.')
     );
 
     return;
@@ -344,7 +454,7 @@ function ProductForm({close,done}:{close:()=>void;done:()=>void}) {
 
   return (
     <form className="form" onSubmit={submit}>
-      <h3>Novo produto</h3>
+      <h3>{product ? 'Editar produto' : 'Novo produto'}</h3>
 
       <input
         required
