@@ -6,6 +6,8 @@ import multer from 'multer';
 import { Pool } from 'pg';
 
 const app = express();
+app.use(express.json());
+
 const port = Number(process.env.PORT ?? 3000);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -614,6 +616,7 @@ app.get('/api/sales', async (_req, res) => {
         c.name AS customer_name,
         s.total,
         s.sold_at,
+
         (
           COALESCE((
             SELECT SUM(si.quantity)
@@ -626,10 +629,21 @@ app.get('/api/sales', async (_req, res) => {
             FROM sale_services ss
             WHERE ss.sale_id = s.id
           ), 0)
-        ) AS item_count
+        ) AS item_count,
+
+        COALESCE((
+          SELECT STRING_AGG(p.name, ', ')
+          FROM sale_items si
+          INNER JOIN products p
+            ON p.id = si.product_id
+          WHERE si.sale_id = s.id
+        ), '') AS product_names
+
       FROM sales s
+
       LEFT JOIN customers c
         ON c.id = s.customer_id
+
       ORDER BY s.sold_at DESC
     `);
 
@@ -646,6 +660,7 @@ app.get('/api/sales', async (_req, res) => {
 app.post('/api/sales', async (req, res) => {
   const {
     customerId = null,
+    paymentMethod = null,
     items = [],
     services = []
   } = req.body;
@@ -786,10 +801,10 @@ app.post('/api/sales', async (req, res) => {
      * CRIA A VENDA
      */
     const saleResult = await client.query(
-      `INSERT INTO sales (customer_id, total)
-       VALUES ($1, $2)
-       RETURNING id, customer_id, total, sold_at`,
-      [customerId, total]
+      `INSERT INTO sales (customer_id, total, payment_method)
+      VALUES ($1, $2, $3)
+      RETURNING id, customer_id, total, sold_at, payment_method`,
+      [customerId, total, paymentMethod]
     );
 
     const sale = saleResult.rows[0];
@@ -882,6 +897,134 @@ app.post('/api/sales', async (req, res) => {
   }
 });
 
+app.post('/api/sales/:id/cancel', async (req, res) => {
+  const saleId = Number(req.params.id);
+
+  if (!Number.isInteger(saleId) || saleId <= 0) {
+    return res.status(400).json({
+      error: 'ID da venda inválido'
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    /*
+     * LOCALIZA A VENDA
+     */
+    const saleResult = await client.query(
+      `SELECT id, status
+       FROM sales
+       WHERE id = $1
+       FOR UPDATE`,
+      [saleId]
+    );
+
+    if (saleResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+
+      return res.status(404).json({
+        error: 'Venda não encontrada'
+      });
+    }
+
+    const sale = saleResult.rows[0];
+
+    /*
+     * VERIFICA SE JÁ FOI CANCELADA
+     */
+    if (sale.status === 'cancelled') {
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: 'Esta venda já foi cancelada'
+      });
+    }
+
+    /*
+     * BUSCA OS PRODUTOS DA VENDA
+     */
+    const itemsResult = await client.query(
+      `SELECT
+         si.product_id,
+         si.quantity,
+         p.name,
+         p.stock_quantity
+       FROM sale_items si
+       INNER JOIN products p
+         ON p.id = si.product_id
+       WHERE si.sale_id = $1
+       FOR UPDATE OF p`,
+      [saleId]
+    );
+
+    /*
+     * DEVOLVE OS PRODUTOS AO ESTOQUE
+     */
+    for (const item of itemsResult.rows) {
+      const newStock =
+        Number(item.stock_quantity) +
+        Number(item.quantity);
+
+      await client.query(
+        `UPDATE products
+         SET stock_quantity = $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [
+          newStock,
+          item.product_id
+        ]
+      );
+
+      /*
+       * REGISTRA A DEVOLUÇÃO NO ESTOQUE
+       */
+      await client.query(
+        `INSERT INTO stock_movements
+         (product_id, type, quantity, reason)
+         VALUES ($1, 'IN', $2, $3)`,
+        [
+          item.product_id,
+          item.quantity,
+          `Cancelamento da venda #${saleId}`
+        ]
+      );
+    }
+
+    /*
+     * MARCA A VENDA COMO CANCELADA
+     */
+    await client.query(
+      `UPDATE sales
+       SET status = 'cancelled'
+       WHERE id = $1`,
+      [saleId]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      message: 'Venda cancelada com sucesso',
+      saleId
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erro ao cancelar venda'
+    });
+
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/sales/:id', async (req, res) => {
   try {
     const saleId = Number(req.params.id);
@@ -900,7 +1043,9 @@ app.get('/api/sales/:id', async (req, res) => {
         c.phone AS customer_phone,
         c.email AS customer_email,
         s.total,
-        s.sold_at
+        s.sold_at,
+        s.status,
+        s.payment_method
       FROM sales s
       LEFT JOIN customers c
         ON c.id = s.customer_id
@@ -954,11 +1099,14 @@ app.get('/api/sales/:id', async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+  console.error('ERRO DETALHES DA VENDA:', error);
 
-    res.status(500).json({
-      error: 'Erro ao consultar detalhes da venda'
-    });
+res.status(500).json({
+  error:
+    error instanceof Error
+      ? error.message
+      : 'Erro ao consultar detalhes da venda'
+  });
   }
 });
 

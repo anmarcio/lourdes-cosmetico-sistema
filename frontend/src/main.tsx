@@ -53,9 +53,17 @@ function App() {
 }
 
 function Dashboard({products, low, loading}:{products:Product[];low:Product[];loading:boolean}) {
-  return <section><div className="hero"><div><span className="eyebrow">TRANSFORMAÇÃO DIGITAL</span><h2>Controle da loja em um só lugar.</h2><p>Base inicial para estoque, vendas, clientes, fornecedores e vitrine virtual.</p></div><div className="hero-card"><Store/><b>Vitrine virtual</b><span>Atendimento via WhatsApp</span></div></div>
-  <div className="cards"><Card icon={<Boxes/>} label="Produtos cadastrados" value={String(products.length)}/><Card icon={<RefreshCw/>} label="Itens em estoque" value={String(products.reduce((a,p)=>a+p.stock_quantity,0))}/><Card icon={<AlertTriangle/>} label="Abaixo do mínimo" value={String(low.length)} warn/></div>
-  <div className="panel"><div className="panel-title"><h3>Estoque</h3><span>Visão inicial</span></div>{loading?<p>Carregando...</p>:<table><thead><tr><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Status</th></tr></thead><tbody>{products.map(p=><tr key={p.id}><td>{p.sku}</td><td><b>{p.name}</b></td><td>{p.category??'—'}</td><td>R$ {Number(p.price).toFixed(2).replace('.',',')}</td><td>{p.stock_quantity}</td><td><span className={p.stock_quantity<=p.minimum_stock?'badge danger':'badge'}>{p.stock_quantity<=p.minimum_stock?'Repor':'Normal'}</span></td></tr>)}</tbody></table>}</div>
+  return <section><div className="hero"><div><span className="eyebrow">TRANSFORMAÇÃO DIGITAL</span><h2>Controle da loja em um só lugar.</h2>
+  <p>Base inicial para estoque, vendas, clientes, fornecedores e vitrine virtual.</p></div><div className="hero-card"><Store/><b>Vitrine virtual</b>
+  <span>Atendimento via WhatsApp</span></div></div>
+  <div className="cards"><Card icon={<Boxes/>} label="Produtos cadastrados" value={String(products.length)}/>
+  <Card icon={<RefreshCw/>} label="Itens em estoque" value={String(products.reduce((a,p)=>a+p.stock_quantity,0))}/>
+  <Card icon={<AlertTriangle/>} label="Abaixo do mínimo" value={String(low.length)} warn/></div>
+  <div className="panel"><div className="panel-title"><h3>Estoque</h3><span>Visão inicial</span></div>
+  {loading?<p>Carregando...</p>:<table><thead><tr><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Status</th></tr></thead>
+  <tbody>{products.map(p=><tr key={p.id}><td>{p.sku}</td><td><b>{p.name}</b></td><td>{p.category??'—'}</td>
+  <td>R$ {Number(p.price).toFixed(2).replace('.',',')}</td><td>{p.stock_quantity}</td><td><span className={p.stock_quantity<=p.minimum_stock?'badge danger':'badge'}>
+    {p.stock_quantity<=p.minimum_stock?'Repor':'Normal'}</span></td></tr>)}</tbody></table>}</div>
   </section>
 }
 function Card({icon,label,value,warn=false}:{icon:React.ReactNode;label:string;value:string;warn?:boolean}) { 
@@ -795,6 +803,8 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [customers, setCustomers] = useState<any[]>([]);
   const [customersLoading, setCustomersLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [creditEntry, setCreditEntry] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
 
@@ -826,8 +836,11 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [saving, setSaving] = useState(false);
   const [sales, setSales] = useState<any[]>([]);
   const [salesLoading, setSalesLoading] = useState(true);
+  const [saleSearch, setSaleSearch] = useState('');
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
   const [saleDetailsLoading, setSaleDetailsLoading] = useState(false);
+  const [saleStarted, setSaleStarted] = useState(false);
+  const [saleFeedback, setSaleFeedback] = useState<'success' | 'cancelled' | null>(null);
 
   const loadSales = async () => {
     setSalesLoading(true);
@@ -896,7 +909,7 @@ const loadServices = async () => {
   }
 };
 
-  const loadSaleDetails = async (saleId: number) => {
+const loadSaleDetails = async (saleId: number) => {
   setSaleDetailsLoading(true);
   setError('');
 
@@ -923,6 +936,54 @@ const loadServices = async () => {
     );
   } finally {
     setSaleDetailsLoading(false);
+  }
+};
+
+const cancelSale = async (saleId: number) => {
+  const confirmed = window.confirm(
+    `Tem certeza que deseja cancelar a venda #${saleId}?\n\n` +
+    `Os produtos dessa venda serão devolvidos ao estoque.`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  setError('');
+  setMessage('');
+
+  try {
+    const response = await fetch(
+      `${API}/sales/${saleId}/cancel`,
+      {
+        method: 'POST'
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || 'Erro ao cancelar venda'
+      );
+    }
+
+    setMessage(
+      `Venda #${saleId} cancelada com sucesso.`
+    );
+
+    await loadSales();
+    await loadSaleDetails(saleId);
+    await onUpdated();
+
+  } catch (error) {
+    console.error(error);
+
+    setError(
+      error instanceof Error
+        ? error.message
+        : 'Não foi possível cancelar a venda.'
+    );
   }
 };
 
@@ -1037,6 +1098,7 @@ const loadServices = async () => {
       setError('Adicione pelo menos um produto ou serviço.');
       return;
     }
+    
 
     setSaving(true);
 
@@ -1084,6 +1146,13 @@ const loadServices = async () => {
           .replace('.', ',')}`
       );
 
+      setSaleFeedback('success');
+
+      setTimeout(() => {
+        setSaleFeedback(null);
+        setSaleStarted(false);
+      }, 3000);
+      
       setItems([]);
       setServiceItems([]);
       setSelectedProduct('');
@@ -1103,6 +1172,24 @@ const loadServices = async () => {
       setSaving(false);
     }
   };
+
+  const filteredSales = sales.filter(sale => {
+  const term = saleSearch.toLowerCase().trim();
+
+  if (!term) return true;
+
+  const customerName = String(sale.customer_name ?? '').toLowerCase();
+  const productNames = String(sale.product_names ?? '').toLowerCase();
+  const saleId = String(sale.id ?? '').toLowerCase();
+  const total = String(sale.total ?? '').toLowerCase();
+
+  return (
+    customerName.includes(term) ||
+    productNames.includes(term) ||
+    saleId.includes(term) ||
+    total.includes(term)
+  );
+});
 
   return (
     <section>
@@ -1130,19 +1217,42 @@ const loadServices = async () => {
         </div>
       )}
 
-      <div className="panel">
+      <div
+        className="panel"
+        style={{
+          border:
+            saleStarted && !saleFeedback
+              ? '2px solid #2563eb'
+              : undefined,
+          transition: 'border 0.3s ease'
+        }}
+      >
 
         <div className="panel-title">
           <h3>Adicionar produto</h3>
-          <span>Nova venda</span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSaleStarted(true);
+              setSaleFeedback(null);
+              setMessage('');
+              setError('');
+            }}
+            className="secondary"
+          >
+            Nova venda
+          </button>
         </div>
 
         <div className="form">
 
         <select
-  value={selectedCustomer}
-  onChange={e => setSelectedCustomer(e.target.value)}
->
+          value={selectedCustomer}
+          onChange={e => setSelectedCustomer(e.target.value)}
+          disabled={!saleStarted}
+        >
+          
   <option value="">
     {customersLoading
       ? 'Carregando clientes...'
@@ -1155,9 +1265,64 @@ const loadServices = async () => {
     </option>
   ))}
 </select>
+
+<div>
+  <label>Forma de pagamento</label>
+
+  <select
+    value={paymentMethod}
+    onChange={e => setPaymentMethod(e.target.value)}
+    disabled={!saleStarted}
+  >
+    <option value="">
+      Selecione a forma de pagamento
+    </option>
+
+    <option value="cash">
+      Dinheiro
+    </option>
+
+    <option value="pix">
+      PIX
+    </option>
+
+    <option value="debit_card">
+      Cartão de débito
+    </option>
+
+    <option value="credit_card">
+      Cartão de crédito
+    </option>
+
+    <option value="bank_transfer">
+      Transferência bancária
+    </option>
+
+    <option value="credit">
+      Fiado
+    </option>
+  </select>
+</div>
+
+{paymentMethod === 'credit' && (
+  <div>
+    <label>Valor da entrada / sinal</label>
+
+    <input
+      type="number"
+      min="0"
+      step="0.01"
+      value={creditEntry}
+      onChange={e => setCreditEntry(e.target.value)}
+      disabled={!saleStarted}
+      placeholder="0,00"
+    />
+  </div>
+)}
           <select
             value={selectedProduct}
-            onChange={e =>setSelectedProduct(e.target.value)}
+            onChange={e => setSelectedProduct(e.target.value)}
+            disabled={!saleStarted}
           >
             <option value="">
               Selecione um produto
@@ -1190,6 +1355,7 @@ const loadServices = async () => {
               setQuantity(e.target.value)
             }
             placeholder="Quantidade"
+            disabled={!saleStarted}
           />
 
           <button
@@ -1295,6 +1461,20 @@ const loadServices = async () => {
       </div>
 
       <div className="panel">
+
+        <div
+          style={{
+            border:
+              saleFeedback === 'success'
+                ? '3px solid #16a34a'
+                : saleStarted
+                  ? '3px solid #2563eb'
+                  : undefined,
+            borderRadius: '10px',
+            padding: '16px',
+            transition: 'border 0.3s ease'
+          }}
+        >
 
         <div className="panel-title">
           <h3>Itens da venda</h3>
@@ -1406,42 +1586,47 @@ const loadServices = async () => {
 
         </div>
 
-        <div className="stock-actions">
+        <div
+  className="stock-actions"
+  style={{ marginTop: '20px' }}
+>
 
-          <button
-            onClick={registerSale}
-            disabled={
-             saving ||
-            (items.length === 0 && serviceItems.length === 0)
-            }
-          >
-            {saving
-              ? 'Registrando...'
-              : 'Finalizar venda'}
-          </button>
+  <button
+    onClick={registerSale}
+    disabled={
+      saving ||
+      (items.length === 0 && serviceItems.length === 0)
+    }
+  >
+    {saving
+      ? 'Registrando...'
+      : 'Finalizar venda'}
+  </button>
 
-          <button
-            className="outline"
-              onClick={() => {
-              setItems([]);
-              setServiceItems([]);
-              setSelectedProduct('');
-              setSelectedService('');
-              setQuantity('1');
-              setServiceQuantity('1');
-              setError('');
-              setMessage('');
-            }}
-          >
-            Limpar
-          </button>
+  <button
+    className="outline"
+    onClick={() => {
+      setItems([]);
+      setServiceItems([]);
+      setSelectedProduct('');
+      setSelectedService('');
+      setQuantity('1');
+      setServiceQuantity('1');
+      setError('');
+      setMessage('');
+    }}
+  >
+    Limpar
+  </button>
 
-        </div>
+</div>
 
-      </div>
+</div>
 
-       <div className="panel stock-history">
-  <div className="panel-title">
+</div>
+
+  <div className="panel stock-history">
+   <div className="panel-title">
     <h3>Histórico de vendas</h3>
 
     <span>
@@ -1450,6 +1635,14 @@ const loadServices = async () => {
         : `${sales.length} venda(s)`}
     </span>
   </div>
+
+  <input
+  type="text"
+  placeholder="Pesquisar por cliente, produto ou nº da venda..."
+  value={saleSearch}
+  onChange={e => setSaleSearch(e.target.value)}
+  style={{ marginBottom: '16px' }}
+/>
 
   {salesLoading ? (
     <p>Carregando histórico...</p>
@@ -1461,18 +1654,19 @@ const loadServices = async () => {
         <tr>
           <th>Venda</th>
           <th>Data</th>
+          <th>Cliente</th>
           <th>Itens</th>
           <th>Total</th>
         </tr>
       </thead>
 
       <tbody>
-        {sales.map(sale => (
+        {filteredSales.map(sale => (
           <tr key={sale.id}
               onClick={() => {
-  console.log('Clique na venda:', sale.id);
-  loadSaleDetails(sale.id);
-}}
+              console.log('Clique na venda:', sale.id);
+              loadSaleDetails(sale.id);
+            }}
           >
             <td>
               <b>#{sale.id}</b>
@@ -1482,6 +1676,10 @@ const loadServices = async () => {
               {new Date(
                 sale.sold_at
               ).toLocaleString('pt-BR')}
+            </td>
+
+            <td>
+              {sale.customer_name || 'Cliente não informado'}
             </td>
 
             <td>
@@ -1509,21 +1707,55 @@ const loadServices = async () => {
     style={{
       marginTop: '20px',
       padding: '20px',
+      border:
+        selectedSale.sale?.status === 'cancelled'
+          ? '3px solid #dc2626'
+          : '3px solid #16a34a',
+      borderRadius: '10px',
+      transition: 'border 0.3s ease'
     }}
   >
 
     <div className="panel-title">
-      <h3>
-        Detalhes da venda #{selectedSale.sale?.id}
-      </h3>
+  <div>
+    <h3>
+      Detalhes da venda #{selectedSale.sale?.id}
+    </h3>
 
-      <button
-        className="secondary"
-        onClick={() => setSelectedSale(null)}
+    {selectedSale.sale?.status === 'cancelled' && (
+      <div
+        style={{
+          color: '#dc2626',
+          fontWeight: 'bold',
+          fontSize: '18px',
+          marginTop: '8px'
+        }}
       >
-        Fechar
+        🔴 Venda Cancelada
+      </div>
+    )}
+  </div>
+
+  <div style={{ display: 'flex', gap: '8px' }}>
+    {selectedSale.sale?.status !== 'cancelled' && (
+      <button
+        className="outline"
+        onClick={() =>
+          cancelSale(selectedSale.sale.id)
+        }
+      >
+        Cancelar venda
       </button>
-    </div>
+    )}
+
+    <button
+      className="secondary"
+      onClick={() => setSelectedSale(null)}
+    >
+      Fechar
+    </button>
+  </div>
+</div>
 
     {saleDetailsLoading ? (
       <p>Carregando detalhes...</p>
@@ -1539,6 +1771,23 @@ const loadServices = async () => {
         <p>
           <b>Cliente:</b>{' '}
           {selectedSale.sale?.customer_name || 'Não informado'}
+        </p>
+
+        <p>
+          <b>Forma de pagamento:</b>{' '}
+          {selectedSale.sale?.payment_method === 'cash'
+            ? 'Dinheiro'
+            : selectedSale.sale?.payment_method === 'pix'
+            ? 'PIX'
+            : selectedSale.sale?.payment_method === 'debit_card'
+            ? 'Cartão de débito'
+            : selectedSale.sale?.payment_method === 'credit_card'
+            ? 'Cartão de crédito'
+            : selectedSale.sale?.payment_method === 'bank_transfer'
+            ? 'Transferência bancária'
+            : selectedSale.sale?.payment_method === 'credit'
+            ? 'Fiado'
+            : 'Não informado'}
         </p>
 
         {selectedSale.products?.length > 0 && (
