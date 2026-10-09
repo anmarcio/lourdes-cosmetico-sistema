@@ -16,13 +16,14 @@ function App() {
   const menu = [
     ['Dashboard', LayoutDashboard],
     ['Produtos', Boxes],
-    ['Estoque', RefreshCw], 
+    ['Estoque', RefreshCw],
     ['Vendas', ShoppingCart],
-    ['Clientes', Users], 
-    ['Fornecedores', Truck], 
+    ['Fiados', ShoppingCart],
+    ['Clientes', Users],
+    ['Fornecedores', Truck],
     ['Serviços', Scissors],
     ['Vitrine virtual', Store]
-  ] as const;
+    ] as const;
   return <div className="app">
     <aside><div className="brand"><div className="logo">L</div><div><strong>Lourdes</strong><span>Cosmético e Utilidades</span></div></div>
       <nav>{menu.map(([name, Icon]) => <button className={tab===name?'active':''} onClick={()=>setTab(name)} key={name}><Icon size={18}/>{name}</button>)}</nav>
@@ -37,6 +38,8 @@ function App() {
   <Stock products={products} onUpdated={load}/>
 ) : tab === 'Vendas' ? (
   <Sales products={products} onUpdated={load}/>
+) : tab === 'Fiados' ? (
+  <Fiados />
 ) : tab === 'Clientes' ? (
   <Customers />
 ) : tab === 'Fornecedores' ? (
@@ -805,6 +808,10 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [creditEntry, setCreditEntry] = useState('');
+  const [secondPaymentEnabled, setSecondPaymentEnabled] = useState(false);
+  const [secondPaymentMethod, setSecondPaymentMethod] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [secondPaymentAmount, setSecondPaymentAmount] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
 
@@ -1090,18 +1097,71 @@ const cancelSale = async (saleId: number) => {
     0
   );
 
-  const registerSale = async () => {
-    setMessage('');
-    setError('');
+const registerSale = async () => {
+  setMessage('');
+  setError('');
 
-   if (items.length === 0 && serviceItems.length === 0) {
-      setError('Adicione pelo menos um produto ou serviço.');
-      return;
-    }
-    
+  if (items.length === 0 && serviceItems.length === 0) {
+    setError('Adicione pelo menos um produto ou serviço.');
+    return;
+  }
 
-    setSaving(true);
+  // Validações para vendas no Fiado
+  const firstAmount = Number(paymentAmount || 0);
 
+if (!paymentMethod) {
+  setError('Selecione a primeira forma de pagamento.');
+  return;
+}
+
+if (firstAmount <= 0) {
+  setError('Informe o valor do primeiro pagamento.');
+  return;
+}
+
+if (secondPaymentEnabled) {
+  const secondAmount = Number(secondPaymentAmount || 0);
+
+  if (!secondPaymentMethod) {
+    setError('Selecione a segunda forma de pagamento.');
+    return;
+  }
+
+  if (secondAmount <= 0) {
+    setError('Informe o valor do segundo pagamento.');
+    return;
+  }
+
+  if (paymentMethod === secondPaymentMethod) {
+    setError(
+      'As duas formas de pagamento devem ser diferentes.'
+    );
+    return;
+  }
+
+  const paymentTotal =
+    firstAmount + secondAmount;
+
+  if (Math.abs(paymentTotal - total) > 0.01) {
+    setError(
+      `A soma dos pagamentos deve ser igual ao total da venda. Total: R$ ${total
+        .toFixed(2)
+        .replace('.', ',')}`
+    );
+    return;
+  }
+} else {
+  if (Math.abs(firstAmount - total) > 0.01) {
+    setError(
+      `O valor do pagamento deve ser igual ao total da venda. Total: R$ ${total
+        .toFixed(2)
+        .replace('.', ',')}`
+    );
+    return;
+  }
+}
+
+  setSaving(true);
     try {
       const response = await fetch(
         `${API}/sales`,
@@ -1110,10 +1170,26 @@ const cancelSale = async (saleId: number) => {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
+         body: JSON.stringify({
   customerId: selectedCustomer
     ? Number(selectedCustomer)
     : null,
+
+  payments: [
+    {
+      paymentMethod,
+      amount: Number(paymentAmount)
+    },
+
+    ...(secondPaymentEnabled
+      ? [
+          {
+            paymentMethod: secondPaymentMethod,
+            amount: Number(secondPaymentAmount)
+          }
+        ]
+      : [])
+  ],
 
   items: items.map(item => ({
     productId: item.productId,
@@ -1266,59 +1342,6 @@ const cancelSale = async (saleId: number) => {
   ))}
 </select>
 
-<div>
-  <label>Forma de pagamento</label>
-
-  <select
-    value={paymentMethod}
-    onChange={e => setPaymentMethod(e.target.value)}
-    disabled={!saleStarted}
-  >
-    <option value="">
-      Selecione a forma de pagamento
-    </option>
-
-    <option value="cash">
-      Dinheiro
-    </option>
-
-    <option value="pix">
-      PIX
-    </option>
-
-    <option value="debit_card">
-      Cartão de débito
-    </option>
-
-    <option value="credit_card">
-      Cartão de crédito
-    </option>
-
-    <option value="bank_transfer">
-      Transferência bancária
-    </option>
-
-    <option value="credit">
-      Fiado
-    </option>
-  </select>
-</div>
-
-{paymentMethod === 'credit' && (
-  <div>
-    <label>Valor da entrada / sinal</label>
-
-    <input
-      type="number"
-      min="0"
-      step="0.01"
-      value={creditEntry}
-      onChange={e => setCreditEntry(e.target.value)}
-      disabled={!saleStarted}
-      placeholder="0,00"
-    />
-  </div>
-)}
           <select
             value={selectedProduct}
             onChange={e => setSelectedProduct(e.target.value)}
@@ -1368,6 +1391,156 @@ const cancelSale = async (saleId: number) => {
 
         </div>
       </div>
+
+   <div className="panel">
+
+  <div className="panel-title">
+    <h3>Forma de pagamento</h3>
+    <span>Pagamento</span>
+  </div>
+
+  <div className="form">
+
+    <label>Forma de pagamento 1</label>
+
+    <select
+      value={paymentMethod}
+      onChange={e =>
+        setPaymentMethod(e.target.value)
+      }
+      disabled={!saleStarted}
+      autoComplete="off"
+    >
+      <option value="">
+        Selecione a forma de pagamento
+      </option>
+
+      <option value="cash">
+        Dinheiro
+      </option>
+
+      <option value="pix">
+        PIX
+      </option>
+
+      <option value="debit_card">
+        Cartão de débito
+      </option>
+
+      <option value="credit_card">
+        Cartão de crédito
+      </option>
+
+      <option value="bank_transfer">
+        Transferência bancária
+      </option>
+
+      <option value="credit">
+        Fiado
+      </option>
+    </select>
+
+    <label>Valor do pagamento 1</label>
+
+    <input
+      type="number"
+      min="0"
+      step="0.01"
+      value={paymentAmount}
+      onChange={e =>
+        setPaymentAmount(e.target.value)
+      }
+      disabled={!saleStarted}
+      placeholder="0,00"
+    />
+
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginTop: '12px'
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={secondPaymentEnabled}
+        onChange={e => {
+          setSecondPaymentEnabled(e.target.checked);
+
+          if (!e.target.checked) {
+            setSecondPaymentMethod('');
+            setSecondPaymentAmount('');
+          }
+        }}
+        disabled={!saleStarted}
+      />
+
+      Adicionar outra forma de pagamento
+    </label>
+
+    {secondPaymentEnabled && (
+      <div style={{ marginTop: '12px' }}>
+
+        <label>Forma de pagamento 2</label>
+
+        <select
+          value={secondPaymentMethod}
+          onChange={e =>
+            setSecondPaymentMethod(e.target.value)
+          }
+          disabled={!saleStarted}
+          autoComplete="off"
+        >
+          <option value="">
+            Selecione a forma de pagamento
+          </option>
+
+          <option value="cash">
+            Dinheiro
+          </option>
+
+          <option value="pix">
+            PIX
+          </option>
+
+          <option value="debit_card">
+            Cartão de débito
+          </option>
+
+          <option value="credit_card">
+            Cartão de crédito
+          </option>
+
+          <option value="bank_transfer">
+            Transferência bancária
+          </option>
+
+          <option value="credit">
+            Fiado
+          </option>
+        </select>
+
+        <label>Valor do pagamento 2</label>
+
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={secondPaymentAmount}
+          onChange={e =>
+            setSecondPaymentAmount(e.target.value)
+          }
+          disabled={!saleStarted}
+          placeholder="0,00"
+        />
+
+      </div>
+    )}
+
+  </div>
+
+</div>         
 
           <div className="panel">
 
@@ -1571,20 +1744,48 @@ const cancelSale = async (saleId: number) => {
           </table>
         )}
 
-        <div className="sales-total">
+      <div className="sales-total">
 
-          <strong>
-            Total da venda:
-          </strong>
+  <strong>
+    Total da venda:
+  </strong>
 
-          <strong>
-            R${' '}
-            {total
-              .toFixed(2)
-              .replace('.', ',')}
-          </strong>
+  <strong>
+    R${' '}
+    {total
+      .toFixed(2)
+      .replace('.', ',')}
+  </strong>
 
-        </div>
+</div>
+
+{paymentMethod === 'credit' && (
+  <div
+    style={{
+      marginTop: '10px',
+      textAlign: 'right'
+    }}
+  >
+    <p>
+      <strong>Entrada:</strong>{' '}
+      R${' '}
+      {Number(creditEntry || 0)
+        .toFixed(2)
+        .replace('.', ',')}
+    </p>
+
+    <p>
+      <strong>Pendente:</strong>{' '}
+      R${' '}
+      {Math.max(
+        total - Number(creditEntry || 0),
+        0
+      )
+        .toFixed(2)
+        .replace('.', ',')}
+    </p>
+  </div>
+)}
 
         <div
   className="stock-actions"
@@ -1773,22 +1974,92 @@ const cancelSale = async (saleId: number) => {
           {selectedSale.sale?.customer_name || 'Não informado'}
         </p>
 
-        <p>
-          <b>Forma de pagamento:</b>{' '}
-          {selectedSale.sale?.payment_method === 'cash'
-            ? 'Dinheiro'
-            : selectedSale.sale?.payment_method === 'pix'
-            ? 'PIX'
-            : selectedSale.sale?.payment_method === 'debit_card'
-            ? 'Cartão de débito'
-            : selectedSale.sale?.payment_method === 'credit_card'
-            ? 'Cartão de crédito'
-            : selectedSale.sale?.payment_method === 'bank_transfer'
-            ? 'Transferência bancária'
-            : selectedSale.sale?.payment_method === 'credit'
-            ? 'Fiado'
-            : 'Não informado'}
-        </p>
+        
+        <h4 style={{ marginTop: '16px' }}>
+          Formas de pagamento
+        </h4>
+
+        {selectedSale.payments?.length > 0 ? (
+          <>
+            <table>
+              <thead>
+                <tr>
+                  <th>Forma de pagamento</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {selectedSale.payments.map((payment: any) => (
+                  <tr key={payment.id}>
+                    <td>
+                      {payment.payment_method === 'cash'
+                        ? 'Dinheiro'
+                        : payment.payment_method === 'pix'
+                        ? 'PIX'
+                        : payment.payment_method === 'debit_card'
+                        ? 'Cartão de débito'
+                        : payment.payment_method === 'credit_card'
+                        ? 'Cartão de crédito'
+                        : payment.payment_method === 'bank_transfer'
+                        ? 'Transferência bancária'
+                        : payment.payment_method === 'credit'
+                        ? 'Fiado'
+                        : payment.payment_method}
+                    </td>
+
+                    <td>
+                      R${' '}
+                      {Number(payment.amount)
+                        .toFixed(2)
+                        .replace('.', ',')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {selectedSale.payments.some(
+              (payment: any) =>
+                payment.payment_method === 'credit'
+            ) && (
+              <p>
+                <b>Valor em fiado:</b>{' '}
+                R${' '}
+                {selectedSale.payments
+                  .filter(
+                    (payment: any) =>
+                      payment.payment_method === 'credit'
+                  )
+                  .reduce(
+                    (sum: number, payment: any) =>
+                      sum + Number(payment.amount),
+                    0
+                  )
+                  .toFixed(2)
+                  .replace('.', ',')}
+              </p>
+            )}
+          </>
+        ) : (
+
+          <p>
+            <b>Forma de pagamento:</b>{' '}
+            {selectedSale.sale?.payment_method === 'cash'
+              ? 'Dinheiro'
+              : selectedSale.sale?.payment_method === 'pix'
+              ? 'PIX'
+              : selectedSale.sale?.payment_method === 'debit_card'
+              ? 'Cartão de débito'
+              : selectedSale.sale?.payment_method === 'credit_card'
+              ? 'Cartão de crédito'
+              : selectedSale.sale?.payment_method === 'bank_transfer'
+              ? 'Transferência bancária'
+              : selectedSale.sale?.payment_method === 'credit'
+              ? 'Fiado'
+              : 'Não informado'}
+          </p>
+        )}
 
         {selectedSale.products?.length > 0 && (
           <>
@@ -2585,6 +2856,445 @@ function ServiceForm({
         </div>
       </form>
     </div>
+  );
+}
+
+
+type CreditReceipt = {
+  id: number;
+  payment_method: string;
+  amount: number | string;
+  received_at: string;
+};
+
+type CreditSale = {
+  id: number;
+  customer_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  total: number | string;
+  sold_at: string;
+  credit_entry: number | string;
+  credit_pending: number | string;
+  product_names: string;
+  receipts: CreditReceipt[];
+};
+
+function Fiados() {
+  const [sales, setSales] = useState<CreditSale[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [search, setSearch] = useState('');
+
+  const [selectedSale, setSelectedSale] =
+    useState<CreditSale | null>(null);
+
+  const [amount, setAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] =
+    useState('pix');
+  const [saving, setSaving] = useState(false);
+
+  const money = (value: number | string) =>
+    Number(value).toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    });
+
+  const paymentLabel = (method: string) => {
+    const labels: Record<string, string> = {
+      cash: 'Dinheiro',
+      pix: 'PIX',
+      debit_card: 'Cartão de débito',
+      credit_card: 'Cartão de crédito',
+      bank_transfer: 'Transferência bancária'
+    };
+
+    return labels[method] || method;
+  };
+
+  async function loadCreditSales() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(
+        `${API}/credit-sales`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Erro ao consultar fiados.'
+        );
+      }
+
+      setSales(data);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível carregar os fiados.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadCreditSales();
+  }, []);
+
+  const filteredSales = sales.filter(sale => {
+    const term = search.trim().toLowerCase();
+
+    return (
+      String(sale.id).includes(term) ||
+      (sale.customer_name || '')
+        .toLowerCase()
+        .includes(term) ||
+      (sale.product_names || '')
+        .toLowerCase()
+        .includes(term)
+    );
+  });
+
+  const totalPending = sales.reduce(
+    (sum, sale) =>
+      sum + Number(sale.credit_pending || 0),
+    0
+  );
+
+  async function registerReceipt() {
+    if (!selectedSale) return;
+
+    const receivedAmount = Number(
+      amount.replace(',', '.')
+    );
+
+    const pending = Number(
+      selectedSale.credit_pending
+    );
+
+    if (
+      !Number.isFinite(receivedAmount) ||
+      receivedAmount <= 0
+    ) {
+      setError('Informe um valor válido para receber.');
+      return;
+    }
+
+    if (receivedAmount > pending) {
+      setError(
+        `O valor não pode ultrapassar ${money(pending)}.`
+      );
+      return;
+    }
+
+    if (!paymentMethod) {
+      setError('Selecione a forma de pagamento.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Confirmar recebimento de ${money(receivedAmount)} ` +
+      `da venda #${selectedSale.id}?`
+    );
+
+    if (!confirmed) return;
+
+    setSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(
+        `${API}/sales/${selectedSale.id}/credit-receipts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            amount: receivedAmount,
+            paymentMethod
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Erro ao registrar recebimento.'
+        );
+      }
+
+      setMessage(
+        `Recebimento de ${money(receivedAmount)} ` +
+        `registrado na venda #${selectedSale.id}.`
+      );
+
+      setAmount('');
+      setSelectedSale(null);
+
+      await loadCreditSales();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao registrar recebimento.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section>
+      <div className="cards">
+        <div className="card">
+          <span>Vendas com fiado pendente</span>
+          <strong>{sales.length}</strong>
+        </div>
+
+        <div className="card">
+          <span>Total a receber</span>
+          <strong>{money(totalPending)}</strong>
+        </div>
+      </div>
+
+      <div className="panel stock-history">
+        <div className="panel-title">
+          <h3>Controle de fiados</h3>
+
+          <button
+            type="button"
+            className="outline"
+            onClick={loadCreditSales}
+            disabled={loading}
+          >
+            {loading ? 'Atualizando...' : 'Atualizar'}
+          </button>
+        </div>
+
+        <input
+          type="text"
+          placeholder="Pesquisar por cliente, produto ou nº da venda..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ marginBottom: '16px' }}
+        />
+
+        {message && <p>{message}</p>}
+        {error && <p role="alert">{error}</p>}
+
+        {loading ? (
+          <p>Carregando fiados...</p>
+        ) : filteredSales.length === 0 ? (
+          <p>Nenhum fiado pendente encontrado.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Venda</th>
+                <th>Data</th>
+                <th>Cliente</th>
+                <th>Produtos</th>
+                <th>Total</th>
+                <th>Saldo pendente</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredSales.map(sale => (
+                <React.Fragment key={sale.id}>
+                  <tr>
+                    <td>#{sale.id}</td>
+
+                    <td>
+                      {new Date(
+                        sale.sold_at
+                      ).toLocaleDateString('pt-BR')}
+                    </td>
+
+                    <td>
+                      {sale.customer_name || 'Cliente não informado'}
+                    </td>
+
+                    <td>
+                      {sale.product_names || 'Serviços'}
+                    </td>
+
+                    <td>{money(sale.total)}</td>
+
+                    <td>
+                      <strong>
+                        {money(sale.credit_pending)}
+                      </strong>
+                    </td>
+
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSale(sale);
+                          setAmount(
+                            String(sale.credit_pending)
+                          );
+                          setPaymentMethod('pix');
+                          setError('');
+                          setMessage('');
+                        }}
+                      >
+                        Receber
+                      </button>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td colSpan={7}>
+                      <details>
+                        <summary>
+                          Histórico de recebimentos da venda #{sale.id}
+                        </summary>
+
+                        {sale.receipts.length === 0 ? (
+                          <p>
+                            Nenhum recebimento posterior registrado.
+                          </p>
+                        ) : (
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Data</th>
+                                <th>Forma de pagamento</th>
+                                <th>Valor recebido</th>
+                              </tr>
+                            </thead>
+
+                            <tbody>
+                              {sale.receipts.map(receipt => (
+                                <tr key={receipt.id}>
+                                  <td>
+                                    {new Date(
+                                      receipt.received_at
+                                    ).toLocaleString('pt-BR')}
+                                  </td>
+
+                                  <td>
+                                    {paymentLabel(
+                                      receipt.payment_method
+                                    )}
+                                  </td>
+
+                                  <td>
+                                    {money(receipt.amount)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </details>
+                    </td>
+                  </tr>
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {selectedSale && (
+        <div className="panel">
+          <div className="panel-title">
+            <h3>Receber fiado — Venda #{selectedSale.id}</h3>
+          </div>
+
+          <p>
+            <strong>Cliente:</strong>{' '}
+            {selectedSale.customer_name || 'Não informado'}
+          </p>
+
+          <p>
+            <strong>Saldo devedor:</strong>{' '}
+            {money(selectedSale.credit_pending)}
+          </p>
+
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              registerReceipt();
+            }}
+          >
+            <label htmlFor="credit-amount">
+              Valor recebido (R$)
+            </label>
+
+            <input
+              id="credit-amount"
+              type="number"
+              min="0.01"
+              max={Number(selectedSale.credit_pending)}
+              step="0.01"
+              required
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="Ex.: 5,00"
+            />
+
+            <label htmlFor="credit-method">
+              Forma de pagamento
+            </label>
+
+            <select
+              id="credit-method"
+              value={paymentMethod}
+              onChange={e => setPaymentMethod(e.target.value)}
+              required
+            >
+              <option value="pix">PIX</option>
+              <option value="cash">Dinheiro</option>
+              <option value="debit_card">Cartão de débito</option>
+              <option value="credit_card">Cartão de crédito</option>
+              <option value="bank_transfer">
+                Transferência bancária
+              </option>
+            </select>
+
+            <div
+              className="stock-actions"
+              style={{ marginTop: '16px' }}
+            >
+              <button
+                type="submit"
+                disabled={saving}
+              >
+                {saving
+                  ? 'Registrando...'
+                  : 'Confirmar recebimento'}
+              </button>
+
+              <button
+                type="button"
+                className="outline"
+                disabled={saving}
+                onClick={() => {
+                  setSelectedSale(null);
+                  setAmount('');
+                  setError('');
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
   );
 }
 

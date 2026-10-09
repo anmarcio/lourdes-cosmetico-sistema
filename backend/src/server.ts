@@ -607,6 +607,65 @@ app.get('/api/stock/movements', async (_req, res) => {
   }
 });
 
+
+/*
+ * CONSULTA VENDAS COM FIADO PENDENTE
+ */
+app.get('/api/credit-sales', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        s.id,
+        s.customer_id,
+        c.name AS customer_name,
+        c.phone AS customer_phone,
+        s.total,
+        s.sold_at,
+        s.credit_entry,
+        s.credit_pending,
+
+        COALESCE((
+          SELECT STRING_AGG(p.name, ', ')
+          FROM sale_items si
+          INNER JOIN products p
+            ON p.id = si.product_id
+          WHERE si.sale_id = s.id
+        ), '') AS product_names,
+
+        COALESCE((
+          SELECT JSON_AGG(
+            JSON_BUILD_OBJECT(
+              'id', cr.id,
+              'payment_method', cr.payment_method,
+              'amount', cr.amount,
+              'received_at', cr.received_at
+            )
+            ORDER BY cr.received_at DESC
+          )
+          FROM credit_receipts cr
+          WHERE cr.sale_id = s.id
+        ), '[]'::json) AS receipts
+
+      FROM sales s
+      LEFT JOIN customers c
+        ON c.id = s.customer_id
+
+      WHERE COALESCE(s.credit_pending, 0) > 0
+        AND COALESCE(s.status, 'completed') = 'completed'
+
+      ORDER BY s.sold_at DESC
+    `);
+
+    res.json(rows);
+  } catch (error) {
+    console.error('ERRO AO CONSULTAR FIADOS:', error);
+
+    res.status(500).json({
+      error: 'Erro ao consultar fiados pendentes.'
+    });
+  }
+});
+
 app.get('/api/sales', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -659,10 +718,12 @@ app.get('/api/sales', async (_req, res) => {
 
 app.post('/api/sales', async (req, res) => {
   const {
-    customerId = null,
-    paymentMethod = null,
-    items = [],
-    services = []
+  customerId = null,
+  paymentMethod = null,
+  creditEntry = 0,
+  payments = [],
+  items = [],
+  services = []
   } = req.body;
 
   if (
@@ -797,15 +858,122 @@ app.post('/api/sales', async (req, res) => {
       });
     }
 
+      /*
+     * PREPARA E VALIDA OS PAGAMENTOS
+     */
+    let salePayments: {
+      paymentMethod: string;
+      amount: number;
+    }[] = [];
+
+    if (Array.isArray(payments) && payments.length > 0) {
+      salePayments = payments.map((payment) => ({
+        paymentMethod: String(payment.paymentMethod || ''),
+        amount: Number(payment.amount)
+      }));
+    } else if (paymentMethod) {
+      const entry =
+        paymentMethod === 'credit'
+          ? Number(creditEntry || 0)
+          : total;
+
+      salePayments = [
+        {
+          paymentMethod,
+          amount:
+            paymentMethod === 'credit'
+              ? Math.max(total - entry, 0)
+              : entry
+        }
+      ];
+    }
+
+    /*
+     * VALIDA OS PAGAMENTOS
+     */
+    if (salePayments.length === 0) {
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: 'Informe pelo menos uma forma de pagamento.'
+      });
+    }
+
+    for (const payment of salePayments) {
+      if (
+        !payment.paymentMethod ||
+        !Number.isFinite(payment.amount) ||
+        payment.amount <= 0
+      ) {
+        await client.query('ROLLBACK');
+
+        return res.status(400).json({
+          error: 'Forma de pagamento ou valor inválido.'
+        });
+      }
+    }
+
+    const paymentTotal = salePayments.reduce(
+      (sum, payment) => sum + payment.amount,
+      0
+    );
+
+    if (Math.abs(paymentTotal - total) > 0.01) {
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: `A soma dos pagamentos (R$ ${paymentTotal
+          .toFixed(2)
+          .replace('.', ',')}) deve ser igual ao total da venda (R$ ${total
+          .toFixed(2)
+          .replace('.', ',')}).`
+      });
+    }
+
     /*
      * CRIA A VENDA
      */
-    const saleResult = await client.query(
-      `INSERT INTO sales (customer_id, total, payment_method)
-      VALUES ($1, $2, $3)
-      RETURNING id, customer_id, total, sold_at, payment_method`,
-      [customerId, total, paymentMethod]
-    );
+  const creditPending = Number(
+  salePayments
+    .filter(payment => payment.paymentMethod === 'credit')
+    .reduce((sum, payment) => sum + payment.amount, 0)
+    .toFixed(2)
+  );
+
+  const entry = Number(
+  Math.max(total - creditPending, 0).toFixed(2)
+  );
+
+  const pending = creditPending;
+
+  
+  const saleResult = await client.query(
+    `INSERT INTO sales (
+      customer_id,
+      total,
+      payment_method,
+      credit_entry,
+      credit_pending
+    )
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING
+      id,
+      customer_id,
+      total,
+      sold_at,
+      payment_method,
+      credit_entry,
+      credit_pending`,
+    [
+      customerId,
+      total,
+      salePayments.length > 1
+        ? 'mixed'
+        : salePayments[0].paymentMethod,
+      entry,
+      pending
+    ]
+  );
 
     const sale = saleResult.rows[0];
 
@@ -862,6 +1030,22 @@ app.post('/api/sales', async (req, res) => {
           service.quantity,
           service.unitPrice,
           service.subtotal
+        ]
+      );
+    }
+
+        /*
+     * REGISTRA OS PAGAMENTOS
+     */
+    for (const payment of salePayments) {
+      await client.query(
+        `INSERT INTO sale_payments
+         (sale_id, payment_method, amount)
+         VALUES ($1, $2, $3)`,
+        [
+          sale.id,
+          payment.paymentMethod,
+          payment.amount
         ]
       );
     }
@@ -1091,22 +1275,154 @@ app.get('/api/sales/:id', async (req, res) => {
       WHERE ss.sale_id = $1
       ORDER BY ss.id
     `, [saleId]);
-
+    
+    const paymentsResult = await pool.query(`
+      SELECT
+        id,
+        payment_method,
+        amount,
+        paid_at
+      FROM sale_payments
+      WHERE sale_id = $1
+      ORDER BY id
+    `, [saleId]);
+    
     res.json({
       sale,
       products: productsResult.rows,
-      services: servicesResult.rows
+      services: servicesResult.rows,
+      payments: paymentsResult.rows
     });
 
   } catch (error) {
   console.error('ERRO DETALHES DA VENDA:', error);
 
-res.status(500).json({
+  res.status(500).json({
   error:
     error instanceof Error
       ? error.message
       : 'Erro ao consultar detalhes da venda'
   });
+  }
+});
+
+
+/*
+ * REGISTRA RECEBIMENTO DE FIADO
+ */
+app.post('/api/sales/:id/credit-receipts', async (req, res) => {
+  const saleId = Number(req.params.id);
+  const amount = Number(Number(req.body.amount).toFixed(2));
+  const paymentMethod = String(
+    req.body.paymentMethod ?? ''
+  ).trim();
+
+  const allowedMethods = [
+    'cash',
+    'pix',
+    'debit_card',
+    'credit_card',
+    'bank_transfer'
+  ];
+
+  if (!Number.isInteger(saleId) || saleId <= 0) {
+    return res.status(400).json({
+      error: 'Número da venda inválido.'
+    });
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({
+      error: 'Informe um valor de recebimento válido.'
+    });
+  }
+
+  if (!allowedMethods.includes(paymentMethod)) {
+    return res.status(400).json({
+      error: 'Forma de pagamento inválida.'
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const saleResult = await client.query(
+      `SELECT id, credit_pending, credit_entry
+       FROM sales
+       WHERE id = $1
+       FOR UPDATE`,
+      [saleId]
+    );
+
+    if (saleResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+
+      return res.status(404).json({
+        error: 'Venda não encontrada.'
+      });
+    }
+
+    const sale = saleResult.rows[0];
+    const pending = Number(sale.credit_pending ?? 0);
+
+    if (pending <= 0) {
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: 'Esta venda não possui fiado pendente.'
+      });
+    }
+
+    if (amount > pending) {
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: 'O recebimento não pode ser maior que a dívida restante.',
+        creditPending: pending
+      });
+    }
+
+    const receiptResult = await client.query(
+      `INSERT INTO credit_receipts
+         (sale_id, payment_method, amount)
+       VALUES ($1, $2, $3)
+       RETURNING id, sale_id, payment_method, amount, received_at`,
+      [saleId, paymentMethod, amount]
+    );
+
+    const updatedSale = await client.query(
+      `UPDATE sales
+       SET credit_pending = GREATEST(
+             COALESCE(credit_pending, 0) - $1,
+             0
+           ),
+           credit_entry = COALESCE(credit_entry, 0) + $1
+       WHERE id = $2
+       RETURNING id, credit_pending, credit_entry`,
+      [amount, saleId]
+    );
+
+    await client.query('COMMIT');
+
+    return res.status(201).json({
+      message: 'Recebimento de fiado registrado com sucesso.',
+      receipt: receiptResult.rows[0],
+      sale: updatedSale.rows[0]
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+
+    console.error('ERRO AO REGISTRAR RECEBIMENTO DE FIADO:', error);
+
+    return res.status(500).json({
+      error: 'Erro ao registrar recebimento de fiado.'
+    });
+
+  } finally {
+    client.release();
   }
 });
 
