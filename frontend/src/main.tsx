@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Boxes, ShoppingCart, Users, Truck, LayoutDashboard, Store, Scissors, AlertTriangle, Plus, RefreshCw } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import './styles.css';
 
 type Product = { id:number; sku:string; name:string; supplier_name:string|null; category:string|null; price:number|string; stock_quantity:number; minimum_stock:number; active:boolean };
@@ -49,7 +52,7 @@ function App() {
 ) : tab === 'Vitrine virtual' ? (
   <Storefront />
 ) : (
-  <Placeholder title={tab}/>
+  <Dashboard products={products} low={low} loading={loading}/>
 )}
     </main>
   </div>
@@ -844,6 +847,8 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [sales, setSales] = useState<any[]>([]);
   const [salesLoading, setSalesLoading] = useState(true);
   const [saleSearch, setSaleSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
   const [saleDetailsLoading, setSaleDetailsLoading] = useState(false);
   const [saleStarted, setSaleStarted] = useState(false);
@@ -1249,23 +1254,107 @@ if (secondPaymentEnabled) {
     }
   };
 
+
   const filteredSales = sales.filter(sale => {
   const term = saleSearch.toLowerCase().trim();
-
-  if (!term) return true;
-
   const customerName = String(sale.customer_name ?? '').toLowerCase();
   const productNames = String(sale.product_names ?? '').toLowerCase();
+  const serviceNames = String(sale.service_names ?? '').toLowerCase();
   const saleId = String(sale.id ?? '').toLowerCase();
   const total = String(sale.total ?? '').toLowerCase();
 
-  return (
+  const matchesSearch =
+    !term ||
     customerName.includes(term) ||
     productNames.includes(term) ||
+    serviceNames.includes(term) ||
     saleId.includes(term) ||
-    total.includes(term)
+    total.includes(term);
+
+  const date = new Date(sale.sold_at);
+
+  const saleDateKey = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
+
+  const matchesStartDate =
+    !startDate || saleDateKey >= startDate;
+
+  const matchesEndDate =
+    !endDate || saleDateKey <= endDate;
+
+  return (
+    matchesSearch &&
+    matchesStartDate &&
+    matchesEndDate
   );
 });
+
+  const exportSalesPDF = () => {
+    const doc = new jsPDF();
+
+    doc.setFontSize(16);
+    doc.text('Lourdes Cosmético e Utilidades', 14, 15);
+
+    doc.setFontSize(12);
+    doc.text('Relatório de vendas', 14, 23);
+
+    autoTable(doc, {
+      startY: 30,
+     head: [['Venda', 'Data', 'Cliente', 'Itens', 'Produtos', 'Serviços', 'Total']],
+
+      body: filteredSales.map(sale => [
+        `#${sale.id}`,
+        sale.sold_at
+          ? new Date(sale.sold_at).toLocaleString('pt-BR')
+          : '-',
+        sale.customer_name || 'Cliente não informado',
+        String(sale.item_count ?? 0),
+        sale.product_names || '-',
+        sale.service_names || '-',
+        Number(sale.total || 0).toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL'
+        })
+      ]),
+      styles: {
+        fontSize: 8,
+        cellPadding: 3
+      },
+      headStyles: {
+        fillColor: [60, 60, 60]
+      }
+    });
+
+    doc.save('relatorio-vendas.pdf');
+  };
+
+  const exportSalesExcel = () => {
+    const rows = filteredSales.map(sale => ({
+      Venda: sale.id,
+      Data: sale.sold_at
+        ? new Date(sale.sold_at).toLocaleString('pt-BR')
+        : '',
+      Cliente: sale.customer_name || 'Cliente não informado',
+      Itens: sale.item_count ?? 0,
+      Produtos: sale.product_names || '',
+      Serviços: sale.service_names || '',
+      Total: Number(sale.total || 0)
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      'Vendas'
+    );
+
+    XLSX.writeFile(workbook, 'relatorio-vendas.xlsx');
+  };
 
   return (
     <section>
@@ -1826,15 +1915,52 @@ if (secondPaymentEnabled) {
 
 </div>
 
-  <div className="panel stock-history">
-   <div className="panel-title">
+  
+<div className="panel stock-history">
+  <div
+    className="panel-title"
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '12px',
+      flexWrap: 'wrap'
+    }}
+  >
     <h3>Histórico de vendas</h3>
 
-    <span>
-      {salesLoading
-        ? 'Carregando...'
-        : `${sales.length} venda(s)`}
-    </span>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexWrap: 'wrap'
+      }}
+    >
+      <span>
+        {salesLoading
+          ? 'Carregando...'
+          : `${filteredSales.length} venda(s)`}
+      </span>
+
+      <button
+        type="button"
+        className="outline"
+        onClick={exportSalesPDF}
+        disabled={salesLoading || filteredSales.length === 0}
+      >
+        Exportar PDF
+      </button>
+
+      <button
+        type="button"
+        className="outline"
+        onClick={exportSalesExcel}
+        disabled={salesLoading || filteredSales.length === 0}
+      >
+        Exportar Excel
+      </button>
+    </div>
   </div>
 
   <input
@@ -1844,6 +1970,60 @@ if (secondPaymentEnabled) {
   onChange={e => setSaleSearch(e.target.value)}
   style={{ marginBottom: '16px' }}
 />
+
+
+<div
+  style={{
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'end',
+    flexWrap: 'wrap',
+    marginBottom: '16px'
+  }}
+>
+  <div>
+    <label
+      htmlFor="start-date"
+      style={{ display: 'block', marginBottom: '6px' }}
+    >
+      Data inicial
+    </label>
+    <input
+      id="start-date"
+      type="date"
+      value={startDate}
+      max={endDate || undefined}
+      onChange={e => setStartDate(e.target.value)}
+    />
+  </div>
+
+  <div>
+    <label
+      htmlFor="end-date"
+      style={{ display: 'block', marginBottom: '6px' }}
+    >
+      Data final
+    </label>
+    <input
+      id="end-date"
+      type="date"
+      value={endDate}
+      min={startDate || undefined}
+      onChange={e => setEndDate(e.target.value)}
+    />
+  </div>
+
+  <button
+    type="button"
+    className="outline"
+    onClick={() => {
+      setStartDate('');
+      setEndDate('');
+    }}
+  >
+    Limpar datas
+  </button>
+</div>
 
   {salesLoading ? (
     <p>Carregando histórico...</p>
@@ -2379,13 +2559,9 @@ function Suppliers() {
       </div>
 
       {open && (
-        <ServiceForm
-          close={() => {
-            setOpen(false);
-            setEditingService(null);
-          }}
-          done={loadServices}
-          service={editingService}
+        <SupplierForm
+          close={() => setOpen(false)}
+          done={loadSuppliers}
         />
       )}
 
@@ -2726,25 +2902,24 @@ function ServiceForm({
     setSaving(true);
 
     try {
+     
       const response = await fetch(
         service
-    ? `${API}/services/${service.id}`
-    : `${API}/services`,
-  {
-    method: service ? 'PUT' : 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: form.name,
-          description: form.description,
-          price: Number(form.price)
-        })
-      });
-
+          ? `${API}/services/${service.id}`
+          : `${API}/services`,
+        {
+          method: service ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: form.name,
+            description: form.description,
+            price: Number(form.price)
+          })
+        }
+      );
+ 
       const data = await response.json();
 
       if (!response.ok) {

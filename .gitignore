@@ -6,3 +6,9 @@ dist/
 .vscode/
 coverage/
 .DS_Store
+
+# Arquivos temporários do TypeScript
+*.tsbuildinfo
+
+# Arquivos temporários do TypeScript
+*.tsbuildinfo

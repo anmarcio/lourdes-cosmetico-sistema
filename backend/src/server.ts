@@ -690,14 +690,22 @@ app.get('/api/sales', async (_req, res) => {
           ), 0)
         ) AS item_count,
 
+        
         COALESCE((
           SELECT STRING_AGG(p.name, ', ')
           FROM sale_items si
           INNER JOIN products p
             ON p.id = si.product_id
           WHERE si.sale_id = s.id
-        ), '') AS product_names
+        ), '') AS product_names,
 
+        COALESCE((
+          SELECT STRING_AGG(sv.name, ', ')
+          FROM sale_services ss
+          INNER JOIN services sv
+            ON sv.id = ss.service_id
+          WHERE ss.sale_id = s.id
+        ), '') AS service_names
       FROM sales s
 
       LEFT JOIN customers c
