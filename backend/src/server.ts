@@ -4,12 +4,25 @@ import cors from 'cors';
 import path from 'path';
 import multer from 'multer';
 import { Pool } from 'pg';
+import nodemailer from 'nodemailer';
+import PDFDocument from 'pdfkit';
+
 
 const app = express();
 app.use(express.json());
 
 const port = Number(process.env.PORT ?? 3000);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT ?? 465),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -631,7 +644,7 @@ app.get('/api/credit-sales', async (_req, res) => {
             ON p.id = si.product_id
           WHERE si.sale_id = s.id
         ), '') AS product_names,
-
+        
         COALESCE((
           SELECT JSON_AGG(
             JSON_BUILD_OBJECT(
@@ -706,6 +719,7 @@ app.get('/api/sales', async (_req, res) => {
             ON sv.id = ss.service_id
           WHERE ss.sale_id = s.id
         ), '') AS service_names
+
       FROM sales s
 
       LEFT JOIN customers c
@@ -1314,6 +1328,128 @@ app.get('/api/sales/:id', async (req, res) => {
   }
 });
 
+
+app.post('/api/sales/:id/email-receipt', async (req, res) => {
+  try {
+    const saleId = Number(req.params.id);
+
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      return res.status(400).json({
+        error: 'ID da venda inválido.'
+      });
+    }
+
+    const saleResult = await pool.query(`
+      SELECT
+        s.id,
+        s.total,
+        s.sold_at,
+        c.name AS customer_name,
+        c.email AS customer_email
+      FROM sales s
+      LEFT JOIN customers c ON c.id = s.customer_id
+      WHERE s.id = $1
+    `, [saleId]);
+
+    if (saleResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Venda não encontrada.'
+      });
+    }
+
+    const sale = saleResult.rows[0];
+
+    if (!sale.customer_email) {
+      return res.status(400).json({
+        error: 'O cliente não possui e-mail cadastrado.'
+      });
+    }
+
+    const productsResult = await pool.query(`
+      SELECT p.name, si.quantity, si.unit_price
+      FROM sale_items si
+      JOIN products p ON p.id = si.product_id
+      WHERE si.sale_id = $1
+      ORDER BY si.id
+    `, [saleId]);
+
+    const servicesResult = await pool.query(`
+      SELECT sv.name, ss.quantity, ss.unit_price
+      FROM sale_services ss
+      JOIN services sv ON sv.id = ss.service_id
+      WHERE ss.sale_id = $1
+      ORDER BY ss.id
+    `, [saleId]);
+
+    const pdf = new PDFDocument({ margin: 50 });
+    const chunks: Buffer[] = [];
+
+    pdf.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+    const pdfBufferPromise = new Promise<Buffer>((resolve, reject) => {
+      pdf.on('end', () => resolve(Buffer.concat(chunks)));
+      pdf.on('error', reject);
+    });
+
+    pdf.fontSize(20).text('Lourdes Cosmético e Utilidades');
+    pdf.moveDown();
+    pdf.fontSize(16).text(`Comprovante da venda #${sale.id}`);
+    pdf.fontSize(10).text(
+      `Data: ${new Date(sale.sold_at).toLocaleString('pt-BR')}`
+    );
+    pdf.text(`Cliente: ${sale.customer_name || 'Não informado'}`);
+    pdf.moveDown();
+    pdf.fontSize(13).text('Itens da venda');
+
+    pdf.fontSize(10);
+
+    for (const item of productsResult.rows) {
+      const subtotal = Number(item.quantity) * Number(item.unit_price);
+      pdf.text(
+        `${item.name} - ${item.quantity} x R$ ${Number(item.unit_price).toFixed(2)} = R$ ${subtotal.toFixed(2)}`
+      );
+    }
+
+    for (const item of servicesResult.rows) {
+      const subtotal = Number(item.quantity) * Number(item.unit_price);
+      pdf.text(
+        `${item.name} (serviço) - ${item.quantity} x R$ ${Number(item.unit_price).toFixed(2)} = R$ ${subtotal.toFixed(2)}`
+      );
+    }
+
+    pdf.moveDown();
+    pdf.fontSize(14).text(
+      `Total: R$ ${Number(sale.total).toFixed(2)}`
+    );
+    pdf.end();
+
+    const pdfBuffer = await pdfBufferPromise;
+
+    await mailer.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: sale.customer_email,
+      subject: `Comprovante da venda #${sale.id} - Lourdes Cosmético e Utilidades`,
+      text: `Olá, ${sale.customer_name || 'cliente'}!\n\nSegue em anexo o comprovante da venda #${sale.id}.\n\nAgradecemos pela preferência!`,
+      attachments: [
+        {
+          filename: `comprovante-venda-${sale.id}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
+    });
+
+    return res.json({
+      message: `Comprovante da venda #${sale.id} enviado para ${sale.customer_email}.`
+    });
+  } catch (error) {
+    console.error('Erro ao enviar comprovante por e-mail:', error);
+
+    return res.status(500).json({
+      error: 'Não foi possível enviar o comprovante. Verifique a configuração do e-mail.'
+    });
+  }
+});
 
 /*
  * REGISTRA RECEBIMENTO DE FIADO

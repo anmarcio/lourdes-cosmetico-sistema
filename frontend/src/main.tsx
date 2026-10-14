@@ -851,6 +851,7 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [endDate, setEndDate] = useState('');
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
   const [saleDetailsLoading, setSaleDetailsLoading] = useState(false);
+  const [sendingReceiptId, setSendingReceiptId] = useState<number | null>(null);
   const [saleStarted, setSaleStarted] = useState(false);
   const [saleFeedback, setSaleFeedback] = useState<'success' | 'cancelled' | null>(null);
 
@@ -996,6 +997,43 @@ const cancelSale = async (saleId: number) => {
         ? error.message
         : 'Não foi possível cancelar a venda.'
     );
+  }
+};
+
+const sendSaleReceipt = async (saleId: number) => {
+  setError('');
+  setMessage('');
+  setSendingReceiptId(saleId);
+
+  try {
+    const response = await fetch(
+      `${API}/sales/${saleId}/email-receipt`,
+      {
+        method: 'POST'
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || 'Não foi possível enviar o comprovante.'
+      );
+    }
+
+    setMessage(
+      data.message || `Comprovante da venda #${saleId} enviado por e-mail.`
+    );
+  } catch (error) {
+    console.error('Erro ao enviar comprovante:', error);
+
+    setError(
+      error instanceof Error
+        ? error.message
+        : 'Erro ao enviar o comprovante por e-mail.'
+    );
+  } finally {
+    setSendingReceiptId(null);
   }
 };
 
@@ -2116,27 +2154,39 @@ if (secondPaymentEnabled) {
       </div>
     )}
   </div>
-
-  <div style={{ display: 'flex', gap: '8px' }}>
-    {selectedSale.sale?.status !== 'cancelled' && (
+ 
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
       <button
         className="outline"
+        disabled={sendingReceiptId === Number(selectedSale.sale?.id)}
         onClick={() =>
-          cancelSale(selectedSale.sale.id)
+          sendSaleReceipt(Number(selectedSale.sale?.id))
         }
       >
-        Cancelar venda
+        {sendingReceiptId === Number(selectedSale.sale?.id)
+          ? 'Enviando...'
+          : 'Enviar comprovante por e-mail'}
       </button>
-    )}
 
-    <button
-      className="secondary"
-      onClick={() => setSelectedSale(null)}
-    >
-      Fechar
-    </button>
+      {selectedSale.sale?.status !== 'cancelled' && (
+        <button
+          className="outline"
+          onClick={() =>
+            cancelSale(selectedSale.sale.id)
+          }
+        >
+          Cancelar venda
+        </button>
+      )}
+
+      <button
+        className="secondary"
+        onClick={() => setSelectedSale(null)}
+      >
+        Fechar
+      </button>
+    </div>
   </div>
-</div>
 
     {saleDetailsLoading ? (
       <p>Carregando detalhes...</p>
@@ -2790,55 +2840,55 @@ function Services() {
                 <th>Ações</th>
               </tr>
             </thead>
+<tbody>
+  {services.map(service => (
+    <tr key={service.id}>
+      <td>
+        <b>{service.name}</b>
+      </td>
 
-            <tbody>
-              {services.map(service => (
-                <tr key={service.id}>
-                  <td>
-                    <b>{service.name}</b>
-                  </td>
+      <td>
+        {service.description ?? '—'}
+      </td>
 
-                  <td>
-                    {service.description ?? '—'}
-                  </td>
+      <td>
+        R${' '}
+        {Number(service.price)
+          .toFixed(2)
+          .replace('.', ',')}
+      </td>
 
-                  <td>
-                    R${' '}
-                    {Number(service.price)
-                      .toFixed(2)
-                      .replace('.', ',')}
-                  </td>
+      <td>
+        <span
+          className={service.active ? 'badge' : 'badge danger'}
+        >
+          {service.active ? 'Ativo' : 'Inativo'}
+        </span>
+      </td>
 
-                  <td>
-                    <span
-                      className={service.active ? 'badge' : 'badge danger'}>
-                      {service.active ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
-                  <td>
-                    <td>
-                    <button
-                      className="outline"
-                      onClick={() => {
-                        setEditingService(service);
-                        setOpen(true);
-                      }}
-                    >
-                      Editar
-                    </button>
+      <td>
+        <button
+          className="outline"
+          onClick={() => {
+            setEditingService(service);
+            setOpen(true);
+          }}
+        >
+          Editar
+        </button>
 
-                    <button
-                      className="outline"
-                      style={{ marginLeft: '8px' }}
-                      onClick={() => toggleServiceStatus(service)}
-                    >
-                      {service.active ? 'Inativar' : 'Ativar'}
-                    </button>
-                  </td>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+        <button
+          className="outline"
+          style={{ marginLeft: '8px' }}
+          onClick={() => toggleServiceStatus(service)}
+        >
+          {service.active ? 'Inativar' : 'Ativar'}
+        </button>
+      </td>
+    </tr>
+  ))}
+</tbody>
+          
           </table>
         )}
       </div>
@@ -3121,19 +3171,19 @@ function Fiados() {
     loadCreditSales();
   }, []);
 
-  const filteredSales = sales.filter(sale => {
-    const term = search.trim().toLowerCase();
+ const filteredSales = sales.filter(sale => {
+  const term = search.trim().toLowerCase();
 
-    return (
-      String(sale.id).includes(term) ||
-      (sale.customer_name || '')
-        .toLowerCase()
-        .includes(term) ||
-      (sale.product_names || '')
-        .toLowerCase()
-        .includes(term)
-    );
-  });
+  return (
+    String(sale.id).includes(term) ||
+    String(sale.customer_name || '')
+      .toLowerCase()
+      .includes(term) ||
+    String(sale.product_names || '')
+      .toLowerCase()
+      .includes(term)
+  );
+});
 
   const totalPending = sales.reduce(
     (sum, sale) =>
