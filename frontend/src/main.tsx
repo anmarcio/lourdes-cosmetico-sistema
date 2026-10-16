@@ -855,7 +855,11 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [saleStarted, setSaleStarted] = useState(false);
   const [saleFeedback, setSaleFeedback] = useState<'success' | 'cancelled' | null>(null);
 
-  const loadSales = async () => {
+  const focusSalesField = (id: string) => {
+  document.getElementById(id)?.focus();
+  };
+
+   const loadSales = async () => {
     setSalesLoading(true);
 
     try {
@@ -901,7 +905,7 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   }
  };
 
-const loadServices = async () => {
+  const loadServices = async () => {
   setServicesLoading(true);
 
   try {
@@ -1042,8 +1046,8 @@ const sendSaleReceipt = async (saleId: number) => {
     loadCustomers();
     loadServices();
   }, []);
-
-  const addItem = () => {
+  
+   const addItem = () => {
     setMessage('');
     setError('');
 
@@ -1152,17 +1156,17 @@ const registerSale = async () => {
   // Validações para vendas no Fiado
   const firstAmount = Number(paymentAmount || 0);
 
-if (!paymentMethod) {
+  if (!paymentMethod) {
   setError('Selecione a primeira forma de pagamento.');
   return;
-}
+  }
 
-if (firstAmount <= 0) {
+  if (firstAmount <= 0) {
   setError('Informe o valor do primeiro pagamento.');
   return;
-}
+  }
 
-if (secondPaymentEnabled) {
+  if (secondPaymentEnabled) {
   const secondAmount = Number(secondPaymentAmount || 0);
 
   if (!secondPaymentMethod) {
@@ -1193,16 +1197,16 @@ if (secondPaymentEnabled) {
     );
     return;
   }
-} else {
-  if (Math.abs(firstAmount - total) > 0.01) {
-    setError(
-      `O valor do pagamento deve ser igual ao total da venda. Total: R$ ${total
-        .toFixed(2)
-        .replace('.', ',')}`
-    );
-    return;
+  } else {
+    if (Math.abs(firstAmount - total) > 0.01) {
+      setError(
+        `O valor do pagamento deve ser igual ao total da venda. Total: R$ ${total
+          .toFixed(2)
+          .replace('.', ',')}`
+      );
+      return;
+    }
   }
-}
 
   setSaving(true);
     try {
@@ -1239,11 +1243,11 @@ if (secondPaymentEnabled) {
     quantity: item.quantity
   })),
 
-  services: serviceItems.map(service => ({
-    serviceId: service.serviceId,
-    quantity: service.quantity
-  }))
-})
+    services: serviceItems.map(service => ({
+      serviceId: service.serviceId,
+      quantity: service.quantity
+    }))
+  })
         }
       );
 
@@ -1271,14 +1275,19 @@ if (secondPaymentEnabled) {
         setSaleFeedback(null);
         setSaleStarted(false);
       }, 3000);
-      
-      setItems([]);
-      setServiceItems([]);
-      setSelectedProduct('');
-      setSelectedService('');
-      setSelectedCustomer('');
-      setQuantity('1');
-      setServiceQuantity('1');
+            
+          setItems([]);
+          setServiceItems([]);
+          setSelectedProduct('');
+          setSelectedService('');
+          setSelectedCustomer('');
+          setQuantity('1');
+          setServiceQuantity('1');
+          setPaymentMethod('');
+          setPaymentAmount('');
+          setSecondPaymentMethod('');
+          setSecondPaymentAmount('');
+          setSecondPaymentEnabled(false);
 
       await onUpdated();
       await loadSales();
@@ -1323,12 +1332,12 @@ if (secondPaymentEnabled) {
   const matchesEndDate =
     !endDate || saleDateKey <= endDate;
 
-  return (
-    matchesSearch &&
-    matchesStartDate &&
-    matchesEndDate
-  );
-});
+    return (
+      matchesSearch &&
+      matchesStartDate &&
+      matchesEndDate
+    );
+  });
 
   const exportSalesPDF = () => {
     const doc = new jsPDF();
@@ -1435,12 +1444,22 @@ if (secondPaymentEnabled) {
           <h3>Adicionar produto</h3>
 
           <button
-            type="button"
+           type="button"
             onClick={() => {
               setSaleStarted(true);
               setSaleFeedback(null);
               setMessage('');
               setError('');
+
+              setSelectedProduct('');
+              setQuantity('1');
+              setSelectedService('');
+              setServiceQuantity('1');
+              setPaymentMethod('');
+              setPaymentAmount('');
+              setSecondPaymentMethod('');
+              setSecondPaymentAmount('');
+              setSecondPaymentEnabled(false);
             }}
             className="secondary"
           >
@@ -1449,12 +1468,19 @@ if (secondPaymentEnabled) {
         </div>
 
         <div className="form">
-
-        <select
-          value={selectedCustomer}
-          onChange={e => setSelectedCustomer(e.target.value)}
-          disabled={!saleStarted}
-        >
+        
+      <select
+        id="sale-customer"
+        value={selectedCustomer}
+        onChange={e => setSelectedCustomer(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            focusSalesField('sale-product');
+          }
+        }}
+        disabled={!saleStarted}
+      >
           
   <option value="">
     {customersLoading
@@ -1468,12 +1494,20 @@ if (secondPaymentEnabled) {
     </option>
   ))}
 </select>
+          
+    <select
+      id="sale-product"
+      value={selectedProduct}
+      onChange={e => setSelectedProduct(e.target.value)}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          focusSalesField('sale-quantity');
+        }
+      }}
+      disabled={!saleStarted}
+    >
 
-          <select
-            value={selectedProduct}
-            onChange={e => setSelectedProduct(e.target.value)}
-            disabled={!saleStarted}
-          >
             <option value="">
               Selecione um produto
             </option>
@@ -1497,16 +1531,25 @@ if (secondPaymentEnabled) {
               ))}
           </select>
 
+          
           <input
+            id="sale-quantity"
             type="number"
             min="1"
             value={quantity}
             onChange={e =>
               setQuantity(e.target.value)
             }
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addItem();
+              }
+            }}
             placeholder="Quantidade"
             disabled={!saleStarted}
           />
+
 
           <button
             type="button"
@@ -1530,14 +1573,23 @@ if (secondPaymentEnabled) {
 
     <label>Forma de pagamento 1</label>
 
-    <select
-      value={paymentMethod}
-      onChange={e =>
-        setPaymentMethod(e.target.value)
-      }
-      disabled={!saleStarted}
-      autoComplete="off"
-    >
+    
+      <select
+        id="sale-payment-method"
+        value={paymentMethod}
+        onChange={e =>
+          setPaymentMethod(e.target.value)
+        }
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            focusSalesField('sale-payment-amount');
+          }
+        }}
+        disabled={!saleStarted}
+        autoComplete="off"
+      >
+
       <option value="">
         Selecione a forma de pagamento
       </option>
@@ -1569,17 +1621,30 @@ if (secondPaymentEnabled) {
 
     <label>Valor do pagamento 1</label>
 
-    <input
-      type="number"
-      min="0"
-      step="0.01"
-      value={paymentAmount}
-      onChange={e =>
-        setPaymentAmount(e.target.value)
-      }
-      disabled={!saleStarted}
-      placeholder="0,00"
-    />
+    
+        <input
+          id="sale-payment-amount"
+          type="number"
+          min="0"
+          step="0.01"
+          value={paymentAmount}
+          onChange={e =>
+            setPaymentAmount(e.target.value)
+          }
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+
+              if (secondPaymentEnabled) {
+                focusSalesField('sale-payment-method-2');
+              } else {
+                focusSalesField('sale-service');
+              }
+            }
+          }}
+          disabled={!saleStarted}
+          placeholder="0,00"
+        />
 
     <label
       style={{
@@ -1611,14 +1676,23 @@ if (secondPaymentEnabled) {
 
         <label>Forma de pagamento 2</label>
 
-        <select
-          value={secondPaymentMethod}
-          onChange={e =>
-            setSecondPaymentMethod(e.target.value)
+        
+      <select
+        id="sale-payment-method-2"
+        value={secondPaymentMethod}
+        onChange={e =>
+          setSecondPaymentMethod(e.target.value)
+        }
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            focusSalesField('sale-payment-amount-2');
           }
-          disabled={!saleStarted}
-          autoComplete="off"
-        >
+        }}
+        disabled={!saleStarted}
+        autoComplete="off"
+      >
+
           <option value="">
             Selecione a forma de pagamento
           </option>
@@ -1649,8 +1723,9 @@ if (secondPaymentEnabled) {
         </select>
 
         <label>Valor do pagamento 2</label>
-
+        
         <input
+          id="sale-payment-amount-2"
           type="number"
           min="0"
           step="0.01"
@@ -1658,6 +1733,12 @@ if (secondPaymentEnabled) {
           onChange={e =>
             setSecondPaymentAmount(e.target.value)
           }
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              focusSalesField('sale-service');
+            }
+          }}
           disabled={!saleStarted}
           placeholder="0,00"
         />
@@ -1677,41 +1758,55 @@ if (secondPaymentEnabled) {
         </div>
 
         <div className="form">
-
-          <select
-            value={selectedService}
-            onChange={e =>
-              setSelectedService(e.target.value)
+          
+        <select
+          id="sale-service"
+          value={selectedService}
+          onChange={e =>
+            setSelectedService(e.target.value)
+          }
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              focusSalesField('sale-service-quantity');
             }
-          >
-            <option value="">
-              {servicesLoading
-                ? 'Carregando serviços...'
-                : 'Selecione um serviço'}
-            </option>
+          }}
+        >
+          <option value="">
+            {servicesLoading
+              ? 'Carregando serviços...'
+              : 'Selecione um serviço'}
+          </option>
 
-            {services
-              .filter(service => service.active)
-              .map(service => (
-                <option
-                  key={service.id}
-                  value={service.id}
-                >
-                  {service.name} — R${' '}
-                  {Number(service.price)
-                    .toFixed(2)
-                    .replace('.', ',')}
-                </option>
-              ))}
-          </select>
-
+          {services
+            .filter(service => service.active)
+            .map(service => (
+              <option
+                key={service.id}
+                value={service.id}
+              >
+                {service.name} — R${' '}
+                {Number(service.price)
+                  .toFixed(2)
+                  .replace('.', ',')}
+              </option>
+            ))}
+        </select>
+          
           <input
+            id="sale-service-quantity"
             type="number"
             min="1"
             value={serviceQuantity}
             onChange={e =>
               setServiceQuantity(e.target.value)
             }
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                focusSalesField('add-service-button');
+              }
+            }}
             placeholder="Quantidade"
           />
 
