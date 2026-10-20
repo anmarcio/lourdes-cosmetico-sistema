@@ -253,6 +253,8 @@ function Products({ products,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [currentCreditPage, setCurrentCreditPage] = useState(1);
+  const creditPerPage = 10;
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const handleNewProduct = () => {
@@ -853,7 +855,7 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [saleDetailsLoading, setSaleDetailsLoading] = useState(false);
   const [sendingReceiptId, setSendingReceiptId] = useState<number | null>(null);
   const [saleStarted, setSaleStarted] = useState(false);
-  const [saleFeedback, setSaleFeedback] = useState<'success' | 'cancelled' | null>(null);
+  const [saleFeedback, setSaleFeedback] = useState<  'success' | 'error' | 'cancelled' | null>(null);
 
   const focusSalesField = (id: string) => {
   document.getElementById(id)?.focus();
@@ -1143,13 +1145,23 @@ const sendSaleReceipt = async (saleId: number) => {
     (sum, service) => sum + service.subtotal,
     0
   );
+  
+useEffect(() => {
+  if (!secondPaymentEnabled) {
+    setPaymentAmount(
+      total > 0 ? total.toFixed(2) : ''
+    );
+  }
+}, [total, secondPaymentEnabled]);
 
 const registerSale = async () => {
   setMessage('');
   setError('');
+  setSaleFeedback(null);
 
   if (items.length === 0 && serviceItems.length === 0) {
     setError('Adicione pelo menos um produto ou serviço.');
+    setSaleFeedback('error');
     return;
   }
 
@@ -1158,11 +1170,13 @@ const registerSale = async () => {
 
   if (!paymentMethod) {
   setError('Selecione a primeira forma de pagamento.');
+  setSaleFeedback('error');
   return;
   }
 
   if (firstAmount <= 0) {
   setError('Informe o valor do primeiro pagamento.');
+  setSaleFeedback('error');
   return;
   }
 
@@ -1171,18 +1185,19 @@ const registerSale = async () => {
 
   if (!secondPaymentMethod) {
     setError('Selecione a segunda forma de pagamento.');
+    setSaleFeedback('error');
     return;
   }
 
   if (secondAmount <= 0) {
     setError('Informe o valor do segundo pagamento.');
+    setSaleFeedback('error');
     return;
   }
 
   if (paymentMethod === secondPaymentMethod) {
-    setError(
-      'As duas formas de pagamento devem ser diferentes.'
-    );
+    setError('As duas formas de pagamento devem ser diferentes.');
+    setSaleFeedback('error');
     return;
   }
 
@@ -1195,6 +1210,7 @@ const registerSale = async () => {
         .toFixed(2)
         .replace('.', ',')}`
     );
+    setSaleFeedback('error');
     return;
   }
   } else {
@@ -1204,6 +1220,7 @@ const registerSale = async () => {
           .toFixed(2)
           .replace('.', ',')}`
       );
+      setSaleFeedback('error');
       return;
     }
   }
@@ -1258,6 +1275,8 @@ const registerSale = async () => {
           data.error ||
             'Não foi possível registrar a venda.'
         );
+
+        setSaleFeedback('error');
         return;
       }
 
@@ -1296,6 +1315,8 @@ const registerSale = async () => {
       setError(
         'Não foi possível conectar ao servidor.'
       );
+
+      setSaleFeedback('error');
     } finally {
       setSaving(false);
     }
@@ -1416,14 +1437,8 @@ const registerSale = async () => {
           </p>
         </div>
       </div>
-
-      {message && (
-        <div className="stock-message">
-          {message}
-        </div>
-      )}
-
-      {error && (
+      
+      {error && saleFeedback !== 'error' && (
         <div className="stock-message">
           {error}
         </div>
@@ -1562,193 +1577,7 @@ const registerSale = async () => {
         </div>
       </div>
 
-   <div className="panel">
 
-  <div className="panel-title">
-    <h3>Forma de pagamento</h3>
-    <span>Pagamento</span>
-  </div>
-
-  <div className="form">
-
-    <label>Forma de pagamento 1</label>
-
-    
-      <select
-        id="sale-payment-method"
-        value={paymentMethod}
-        onChange={e =>
-          setPaymentMethod(e.target.value)
-        }
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            focusSalesField('sale-payment-amount');
-          }
-        }}
-        disabled={!saleStarted}
-        autoComplete="off"
-      >
-
-      <option value="">
-        Selecione a forma de pagamento
-      </option>
-
-      <option value="cash">
-        Dinheiro
-      </option>
-
-      <option value="pix">
-        PIX
-      </option>
-
-      <option value="debit_card">
-        Cartão de débito
-      </option>
-
-      <option value="credit_card">
-        Cartão de crédito
-      </option>
-
-      <option value="bank_transfer">
-        Transferência bancária
-      </option>
-
-      <option value="credit">
-        Fiado
-      </option>
-    </select>
-
-    <label>Valor do pagamento 1</label>
-
-    
-        <input
-          id="sale-payment-amount"
-          type="number"
-          min="0"
-          step="0.01"
-          value={paymentAmount}
-          onChange={e =>
-            setPaymentAmount(e.target.value)
-          }
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-
-              if (secondPaymentEnabled) {
-                focusSalesField('sale-payment-method-2');
-              } else {
-                focusSalesField('sale-service');
-              }
-            }
-          }}
-          disabled={!saleStarted}
-          placeholder="0,00"
-        />
-
-    <label
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        marginTop: '12px'
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={secondPaymentEnabled}
-        onChange={e => {
-          setSecondPaymentEnabled(e.target.checked);
-
-          if (!e.target.checked) {
-            setSecondPaymentMethod('');
-            setSecondPaymentAmount('');
-          }
-        }}
-        disabled={!saleStarted}
-      />
-
-      Adicionar outra forma de pagamento
-    </label>
-
-    {secondPaymentEnabled && (
-      <div style={{ marginTop: '12px' }}>
-
-        <label>Forma de pagamento 2</label>
-
-        
-      <select
-        id="sale-payment-method-2"
-        value={secondPaymentMethod}
-        onChange={e =>
-          setSecondPaymentMethod(e.target.value)
-        }
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            focusSalesField('sale-payment-amount-2');
-          }
-        }}
-        disabled={!saleStarted}
-        autoComplete="off"
-      >
-
-          <option value="">
-            Selecione a forma de pagamento
-          </option>
-
-          <option value="cash">
-            Dinheiro
-          </option>
-
-          <option value="pix">
-            PIX
-          </option>
-
-          <option value="debit_card">
-            Cartão de débito
-          </option>
-
-          <option value="credit_card">
-            Cartão de crédito
-          </option>
-
-          <option value="bank_transfer">
-            Transferência bancária
-          </option>
-
-          <option value="credit">
-            Fiado
-          </option>
-        </select>
-
-        <label>Valor do pagamento 2</label>
-        
-        <input
-          id="sale-payment-amount-2"
-          type="number"
-          min="0"
-          step="0.01"
-          value={secondPaymentAmount}
-          onChange={e =>
-            setSecondPaymentAmount(e.target.value)
-          }
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              focusSalesField('sale-service');
-            }
-          }}
-          disabled={!saleStarted}
-          placeholder="0,00"
-        />
-
-      </div>
-    )}
-
-  </div>
-
-</div>         
 
           <div className="panel">
 
@@ -2014,33 +1843,21 @@ const registerSale = async () => {
   style={{ marginTop: '20px' }}
 >
 
-  <button
-    onClick={registerSale}
-    disabled={
-      saving ||
-      (items.length === 0 && serviceItems.length === 0)
-    }
-  >
-    {saving
-      ? 'Registrando...'
-      : 'Finalizar venda'}
-  </button>
-
-  <button
-    className="outline"
-    onClick={() => {
-      setItems([]);
-      setServiceItems([]);
-      setSelectedProduct('');
-      setSelectedService('');
-      setQuantity('1');
-      setServiceQuantity('1');
-      setError('');
-      setMessage('');
-    }}
-  >
-    Limpar
-  </button>
+<button
+  className="outline"
+  onClick={() => {
+    setItems([]);
+    setServiceItems([]);
+    setSelectedProduct('');
+    setSelectedService('');
+    setQuantity('1');
+    setServiceQuantity('1');
+    setError('');
+    setMessage('');
+  }}
+>
+  Limpar
+</button>
 
 </div>
 
@@ -2048,7 +1865,264 @@ const registerSale = async () => {
 
 </div>
 
-  
+<div className="panel">
+
+  <div className="panel-title">
+    <h3>Forma de pagamento</h3>
+    <span>Pagamento</span>
+  </div>
+
+  <div className="form">
+
+    <label>Forma de pagamento 1</label>
+
+    
+      <select
+        id="sale-payment-method"
+        value={paymentMethod}
+        onChange={e =>
+          setPaymentMethod(e.target.value)
+        }
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            focusSalesField('sale-payment-amount');
+          }
+        }}
+        disabled={!saleStarted}
+        autoComplete="off"
+      >
+
+      <option value="">
+        Selecione a forma de pagamento
+      </option>
+
+      <option value="cash">
+        Dinheiro
+      </option>
+
+      <option value="pix">
+        PIX
+      </option>
+
+      <option value="debit_card">
+        Cartão de débito
+      </option>
+
+      <option value="credit_card">
+        Cartão de crédito
+      </option>
+
+      <option value="bank_transfer">
+        Transferência bancária
+      </option>
+
+      <option value="credit">
+        Fiado
+      </option>
+    </select>
+
+    <label>Valor do pagamento 1</label>
+
+    
+        <input
+          id="sale-payment-amount"
+          type="number"
+          min="0"
+          step="0.01"
+          value={paymentAmount}
+          onChange={e => {
+            const value = e.target.value;
+            setPaymentAmount(value);
+
+            if (secondPaymentEnabled) {
+              const firstAmount = Number(value || 0);
+              const remaining = Math.max(0, total - firstAmount);
+
+              setSecondPaymentAmount(
+                remaining > 0 ? remaining.toFixed(2) : ''
+              );
+            }
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+
+              if (secondPaymentEnabled) {
+                focusSalesField('sale-payment-method-2');
+              } else {
+                focusSalesField('sale-service');
+              }
+            }
+          }}
+          disabled={!saleStarted}
+          placeholder="0,00"
+        />
+
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginTop: '12px'
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={secondPaymentEnabled}
+        onChange={e => {
+          setSecondPaymentEnabled(e.target.checked);
+
+          if (!e.target.checked) {
+            setSecondPaymentMethod('');
+            setSecondPaymentAmount('');
+          }
+        }}
+        disabled={!saleStarted}
+      />
+
+      Adicionar outra forma de pagamento
+    </label>
+
+    {secondPaymentEnabled && (
+      <div style={{ marginTop: '12px' }}>
+
+        <label>Forma de pagamento 2</label>
+
+        
+      <select
+        id="sale-payment-method-2"
+        value={secondPaymentMethod}
+        onChange={e =>
+          setSecondPaymentMethod(e.target.value)
+        }
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            focusSalesField('sale-payment-amount-2');
+          }
+        }}
+        disabled={!saleStarted}
+        autoComplete="off"
+      >
+
+          <option value="">
+            Selecione a forma de pagamento
+          </option>
+
+          <option value="cash">
+            Dinheiro
+          </option>
+
+          <option value="pix">
+            PIX
+          </option>
+
+          <option value="debit_card">
+            Cartão de débito
+          </option>
+
+          <option value="credit_card">
+            Cartão de crédito
+          </option>
+
+          <option value="bank_transfer">
+            Transferência bancária
+          </option>
+
+          <option value="credit">
+            Fiado
+          </option>
+        </select>
+
+        <label>Valor do pagamento 2</label>
+        
+        <input
+          id="sale-payment-amount-2"
+          type="number"
+          min="0"
+          step="0.01"
+          value={secondPaymentAmount}
+          onChange={e =>
+            setSecondPaymentAmount(e.target.value)
+          }
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              focusSalesField('sale-service');
+            }
+          }}
+          disabled={!saleStarted}
+          placeholder="0,00"
+        />
+
+      </div>
+    )}
+
+      <div className="stock-actions" style={{ marginTop: '20px' }}>
+      
+        <button
+          onClick={registerSale}
+          disabled={
+            saving ||
+            (items.length === 0 && serviceItems.length === 0)
+          }
+          style={{
+            backgroundColor:
+              saleFeedback === 'success'
+                ? '#198754'
+                : saleFeedback === 'error'
+                  ? '#dc3545'
+                  : undefined,
+            color: saleFeedback ? '#ffffff' : undefined,
+            borderColor:
+              saleFeedback === 'success'
+                ? '#198754'
+                : saleFeedback === 'error'
+                  ? '#dc3545'
+                  : undefined
+          }}
+        >
+          {saving
+            ? 'Registrando...'
+            : saleFeedback === 'success'
+              ? 'Venda concluída!'
+              : saleFeedback === 'error'
+                ? 'Erro ao registrar'
+                : 'Finalizar venda'}
+        </button>
+
+    </div>
+
+    
+      {(message || error) && (
+        <div
+          className="stock-message"
+          style={{
+            marginTop: '12px',
+            padding: '12px',
+            borderRadius: '6px',
+            backgroundColor: error
+              ? '#f8d7da'
+              : '#d1e7dd',
+            color: error
+              ? '#842029'
+              : '#0f5132',
+            border: `1px solid ${
+              error ? '#f5c2c7' : '#badbcc'
+            }`
+          }}
+          role="status"
+        >
+          {error || message}
+        </div>
+      )}
+
+
+  </div>
+
+</div>           
+
 <div className="panel stock-history">
   <div
     className="panel-title"
