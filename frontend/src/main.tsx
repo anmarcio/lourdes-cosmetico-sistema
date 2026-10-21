@@ -253,9 +253,10 @@ function Products({ products,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [currentCreditPage, setCurrentCreditPage] = useState(1);
-  const creditPerPage = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  
 
   const handleNewProduct = () => {
     setEditingProduct(null);
@@ -284,6 +285,20 @@ function Products({ products,
     p.supplier_name?.toLowerCase().includes(term)
     );
   });
+
+  const totalPages = Math.max(
+  1,
+  Math.ceil(filteredProducts.length / itemsPerPage)
+    );
+
+    const paginatedProducts = filteredProducts.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+
+    useEffect(() => {
+      setCurrentPage(1);
+    }, [search]);
 
   return (
     <section>
@@ -326,7 +341,7 @@ function Products({ products,
           </thead>
 
           <tbody>
-            {filteredProducts.map(p => (
+            {paginatedProducts.map(p => (
               <tr key={p.id}>
                 <td>{p.sku}</td>
                 <td>{p.name}</td>
@@ -353,11 +368,65 @@ function Products({ products,
               </tr>
             ))}
           </tbody>
+
         </table>
+
+        {filteredProducts.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginTop: '16px'
+            }}
+          >
+            <span>
+              Página {currentPage} de {totalPages}
+              {' — '}Exibindo{' '}
+              {(currentPage - 1) * itemsPerPage + 1}
+              {' a '}
+              {Math.min(
+                currentPage * itemsPerPage,
+                filteredProducts.length
+              )}
+              {' de '}
+              {filteredProducts.length} produto(s)
+            </span>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page => Math.max(1, page - 1))
+                }
+                disabled={currentPage <= 1}
+              >
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page =>
+                    Math.min(totalPages, page + 1)
+                  )
+                }
+                disabled={currentPage >= totalPages}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
 }
+
 
 function ProductForm({
   close,
@@ -559,6 +628,32 @@ function Stock({
   const [movements, setMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [movementPage, setMovementPage] = useState(1);
+  const movementsPerPage = 10;
+
+  const totalPages = Math.max(
+  1,
+    Math.ceil(products.length / itemsPerPage)
+  );
+
+  const paginatedProducts = products.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  
+const totalMovementPages = Math.max(
+  1,
+  Math.ceil(movements.length / movementsPerPage)
+);
+
+const paginatedMovements = movements.slice(
+  (movementPage - 1) * movementsPerPage,
+  movementPage * movementsPerPage
+);
+
 
   const loadMovements = async () => {
     setLoading(true);
@@ -672,7 +767,7 @@ function Stock({
           </thead>
 
           <tbody>
-            {products.map(product => {
+            {paginatedProducts.map(product => {
               const lowStock =
                 product.stock_quantity <= product.minimum_stock;
 
@@ -733,6 +828,58 @@ function Stock({
             })}
           </tbody>
         </table>
+
+        {products.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginTop: '16px'
+            }}
+          >
+            <span>
+              Página {currentPage} de {totalPages}
+              {' — '}Exibindo{' '}
+              {(currentPage - 1) * itemsPerPage + 1}
+              {' a '}
+              {Math.min(
+                currentPage * itemsPerPage,
+                products.length
+              )}
+              {' de '}
+              {products.length} produto(s)
+            </span>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page => Math.max(1, page - 1))
+                }
+                disabled={currentPage <= 1}
+              >
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page =>
+                    Math.min(totalPages, page + 1)
+                  )
+                }
+                disabled={currentPage >= totalPages}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="panel stock-history">
@@ -760,7 +907,7 @@ function Stock({
             </thead>
 
             <tbody>
-              {movements.map(movement => (
+              {paginatedMovements.map(movement => (
                 <tr key={movement.id}>
                   <td>
                     {new Date(
@@ -786,20 +933,74 @@ function Stock({
                     </span>
                   </td>
 
-                  <td>{movement.quantity}</td>
+                  
+              <td>{movement.quantity}</td>
 
-                  <td>
-                    {movement.reason ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              <td>
+                {movement.reason ?? '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )}
+
+    {!loading && movements.length > 0 && (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap',
+          marginTop: '16px'
+        }}
+      >
+        <span>
+          Página {movementPage} de {totalMovementPages}
+          {' — '}Exibindo{' '}
+          {(movementPage - 1) * movementsPerPage + 1}
+          {' a '}
+          {Math.min(
+            movementPage * movementsPerPage,
+            movements.length
+          )}
+          {' de '}
+          {movements.length} movimentação(ões)
+        </span>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            className="outline"
+            onClick={() =>
+              setMovementPage(page => Math.max(1, page - 1))
+            }
+            disabled={movementPage <= 1}
+          >
+            Anterior
+          </button>
+
+          <button
+            type="button"
+            className="outline"
+            onClick={() =>
+              setMovementPage(page =>
+                Math.min(totalMovementPages, page + 1)
+              )
+            }
+            disabled={movementPage >= totalMovementPages}
+          >
+            Próxima
+          </button>
+        </div>
       </div>
-    </section>
-  );
+    )}
+  </div>
+</section>
+);
 }
+
 
 
 
@@ -849,6 +1050,8 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [sales, setSales] = useState<any[]>([]);
   const [salesLoading, setSalesLoading] = useState(true);
   const [saleSearch, setSaleSearch] = useState('');
+  const [salesPage, setSalesPage] = useState(1);
+  const salesPerPage = 10;
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
@@ -1049,6 +1252,10 @@ const sendSaleReceipt = async (saleId: number) => {
     loadServices();
   }, []);
   
+  useEffect(() => {
+  setSalesPage(1);
+}, [saleSearch, startDate, endDate]);
+
    const addItem = () => {
     setMessage('');
     setError('');
@@ -1359,6 +1566,16 @@ const registerSale = async () => {
       matchesEndDate
     );
   });
+
+  const totalSalesPages = Math.max(
+  1,
+  Math.ceil(filteredSales.length / salesPerPage)
+);
+
+const paginatedSales = filteredSales.slice(
+  (salesPage - 1) * salesPerPage,
+  salesPage * salesPerPage
+);
 
   const exportSalesPDF = () => {
     const doc = new jsPDF();
@@ -2248,36 +2465,37 @@ const registerSale = async () => {
         </tr>
       </thead>
 
+      
       <tbody>
-        {filteredSales.map(sale => (
-          <tr key={sale.id}
-              onClick={() => {
+        {paginatedSales.map(sale => (
+          <tr
+            key={sale.id}
+            onClick={() => {
               console.log('Clique na venda:', sale.id);
               loadSaleDetails(sale.id);
             }}
+            style={{ cursor: 'pointer' }}
           >
             <td>
               <b>#{sale.id}</b>
             </td>
 
             <td>
-              {new Date(
-                sale.sold_at
-              ).toLocaleString('pt-BR')}
+              {sale.sold_at
+                ? new Date(sale.sold_at).toLocaleString('pt-BR')
+                : ''}
             </td>
 
             <td>
               {sale.customer_name || 'Cliente não informado'}
             </td>
 
-            <td>
-              {sale.item_count}
-            </td>
+            <td>{sale.item_count ?? 0}</td>
 
             <td>
               <b>
                 R${' '}
-                {Number(sale.total)
+                {Number(sale.total || 0)
                   .toFixed(2)
                   .replace('.', ',')}
               </b>
@@ -2286,8 +2504,61 @@ const registerSale = async () => {
         ))}
       </tbody>
     </table>
-          )}
+  )}
+
+  {!salesLoading && filteredSales.length > 0 && (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '12px',
+        flexWrap: 'wrap',
+        marginTop: '16px'
+      }}
+    >
+      <span>
+        Página {salesPage} de {totalSalesPages}
+        {' — '}Exibindo{' '}
+        {(salesPage - 1) * salesPerPage + 1}
+        {' a '}
+        {Math.min(
+          salesPage * salesPerPage,
+          filteredSales.length
+        )}
+        {' de '}
+        {filteredSales.length} venda(s)
+      </span>
+
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          type="button"
+          className="outline"
+          onClick={() =>
+            setSalesPage(current => Math.max(1, current - 1))
+          }
+          disabled={salesPage <= 1}
+        >
+          Anterior
+        </button>
+
+        <button
+          type="button"
+          className="outline"
+          onClick={() =>
+            setSalesPage(current =>
+              Math.min(totalSalesPages, current + 1)
+            )
+          }
+          disabled={salesPage >= totalSalesPages}
+        >
+          Próxima
+        </button>
       </div>
+    </div>
+  )}
+      </div>
+
 
 {selectedSale && (
   <div
@@ -2566,6 +2837,21 @@ const registerSale = async () => {
 function Customers() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(customers.length / itemsPerPage)
+  );
+
+  const paginatedCustomers = customers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
  
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -2723,7 +3009,7 @@ function Customers() {
             </thead>
 
             <tbody>
-              {customers.map(customer => (
+              {paginatedCustomers.map(customer => (
                 <tr key={customer.id}>
                   <td>{customer.name}</td>
                   <td>{customer.phone || '-'}</td>
@@ -2735,17 +3021,87 @@ function Customers() {
                   </td>
                 </tr>
               ))}
+            
             </tbody>
           </table>
+        )}
+
+        {!loading && customers.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginTop: '16px'
+            }}
+          >
+            <span>
+              Página {currentPage} de {totalPages}
+              {' — '}Exibindo{' '}
+              {(currentPage - 1) * itemsPerPage + 1}
+              {' a '}
+              {Math.min(
+                currentPage * itemsPerPage,
+                customers.length
+              )}
+              {' de '}
+              {customers.length} cliente(s)
+            </span>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page => Math.max(1, page - 1))
+                }
+                disabled={currentPage <= 1}
+              >
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page =>
+                    Math.min(totalPages, page + 1)
+                  )
+                }
+                disabled={currentPage >= totalPages}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </section>
   );
 }
 
+
 function Suppliers() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(suppliers.length / itemsPerPage)
+  );
+
+  const paginatedSuppliers = suppliers.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+
   const [open, setOpen] = useState(false);
 
   const loadSuppliers = () => {
@@ -2805,7 +3161,7 @@ function Suppliers() {
             </thead>
 
             <tbody>
-              {suppliers.map(supplier => (
+              {paginatedSuppliers.map(supplier => (
                 <tr key={supplier.id}>
                   <td>{supplier.name}</td>
                   <td>{supplier.phone ?? '—'}</td>
@@ -2814,13 +3170,67 @@ function Suppliers() {
                   <td>{supplier.cnpj ?? '—'}</td>
                 </tr>
               ))}
+            
             </tbody>
           </table>
+        )}
+
+        {!loading && suppliers.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginTop: '16px'
+            }}
+          >
+            <span>
+              Página {currentPage} de {totalPages}
+              {' — '}Exibindo{' '}
+              {(currentPage - 1) * itemsPerPage + 1}
+              {' a '}
+              {Math.min(
+                currentPage * itemsPerPage,
+                suppliers.length
+              )}
+              {' de '}
+              {suppliers.length} fornecedor(es)
+            </span>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page => Math.max(1, page - 1))
+                }
+                disabled={currentPage <= 1}
+              >
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page =>
+                    Math.min(totalPages, page + 1)
+                  )
+                }
+                disabled={currentPage >= totalPages}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </section>
   );
 }
+
 
 function SupplierForm({close,done}:{close:()=>void;done:()=>void}) {
   const [form,setForm] = useState({
@@ -2906,6 +3316,22 @@ function SupplierForm({close,done}:{close:()=>void;done:()=>void}) {
 function Services() {
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(services.length / itemsPerPage)
+  );
+
+  const paginatedServices = services.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+
   const [open, setOpen] = useState(false);
   const [editingService, setEditingService] = useState<any | null>(null);
 
@@ -3010,7 +3436,7 @@ function Services() {
               </tr>
             </thead>
 <tbody>
-  {services.map(service => (
+  {paginatedServices.map(service => (
     <tr key={service.id}>
       <td>
         <b>{service.name}</b>
@@ -3058,12 +3484,66 @@ function Services() {
   ))}
 </tbody>
           
+         
           </table>
+        )}
+
+        {!loading && services.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginTop: '16px'
+            }}
+          >
+            <span>
+              Página {currentPage} de {totalPages}
+              {' — '}Exibindo{' '}
+              {(currentPage - 1) * itemsPerPage + 1}
+              {' a '}
+              {Math.min(
+                currentPage * itemsPerPage,
+                services.length
+              )}
+              {' de '}
+              {services.length} serviço(s)
+            </span>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page => Math.max(1, page - 1))
+                }
+                disabled={currentPage <= 1}
+              >
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page =>
+                    Math.min(totalPages, page + 1)
+                  )
+                }
+                disabled={currentPage >= totalPages}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </section>
   );
 }
+
 
 function ServiceForm({
   close,
@@ -3280,6 +3760,8 @@ function Fiados() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   const [selectedSale, setSelectedSale] =
     useState<CreditSale | null>(null);
@@ -3353,6 +3835,20 @@ function Fiados() {
       .includes(term)
   );
 });
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredSales.length / itemsPerPage)
+  );
+
+  const paginatedSales = filteredSales.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+  setCurrentPage(1);
+}, [search]);
 
   const totalPending = sales.reduce(
     (sum, sale) =>
@@ -3447,17 +3943,54 @@ function Fiados() {
 
   return (
     <section>
-      <div className="cards">
-        <div className="card">
-          <span>Vendas com fiado pendente</span>
-          <strong>{sales.length}</strong>
-        </div>
-
-        <div className="card">
-          <span>Total a receber</span>
-          <strong>{money(totalPending)}</strong>
-        </div>
+      
+<div
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: '650px',
+    flexWrap: 'wrap',
+    padding: '14px 18px',
+    marginBottom: '20px',
+    border: '1px solid #D97706',
+    borderRadius: '10px',
+    backgroundColor: '#FFF7ED',
+    color: '#7C2D12',
+  }}
+>
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      flexWrap: 'wrap',
+    }}
+  >
+    <strong>Vendas com fiado pendente:</strong>
+    <strong>{sales.filter(sale =>
+      Number(sale.credit_pending) > 0
+    ).length}</strong>
       </div>
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <strong>Total a receber:</strong>
+        <strong>
+          {totalPending.toLocaleString('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+          })}
+        </strong>
+      </div>
+    </div>
+
 
       <div className="panel stock-history">
         <div className="panel-title">
@@ -3503,7 +4036,7 @@ function Fiados() {
             </thead>
 
             <tbody>
-              {filteredSales.map(sale => (
+              {paginatedSales.map(sale => (
                 <React.Fragment key={sale.id}>
                   <tr>
                     <td>#{sale.id}</td>
@@ -3598,9 +4131,63 @@ function Fiados() {
                 </React.Fragment>
               ))}
             </tbody>
+         
           </table>
         )}
+
+        {!loading && filteredSales.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginTop: '16px'
+            }}
+          >
+            <span>
+              Página {currentPage} de {totalPages}
+              {' — '}Exibindo{' '}
+              {(currentPage - 1) * itemsPerPage + 1}
+              {' a '}
+              {Math.min(
+                currentPage * itemsPerPage,
+                filteredSales.length
+              )}
+              {' de '}
+              {filteredSales.length} fiado(s)
+            </span>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page => Math.max(1, page - 1))
+                }
+                disabled={currentPage <= 1}
+              >
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                className="outline"
+                onClick={() =>
+                  setCurrentPage(page =>
+                    Math.min(totalPages, page + 1)
+                  )
+                }
+                disabled={currentPage >= totalPages}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
 
       {selectedSale && (
         <div className="panel">
