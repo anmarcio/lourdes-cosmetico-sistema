@@ -633,12 +633,24 @@ function Stock({
   const [movementPage, setMovementPage] = useState(1);
   const movementsPerPage = 10;
 
+  const [search, setSearch] = useState('');
+
+  const filteredProducts = products.filter(product => {
+    const term = search.trim().toLowerCase();
+
+    return (
+      String(product.sku ?? '').toLowerCase().includes(term) ||
+      String(product.name ?? '').toLowerCase().includes(term) ||
+      String(product.category ?? '').toLowerCase().includes(term)
+    );
+  });
+  
   const totalPages = Math.max(
   1,
-    Math.ceil(products.length / itemsPerPage)
+  Math.ceil(filteredProducts.length / itemsPerPage)
   );
 
-  const paginatedProducts = products.slice(
+  const paginatedProducts = filteredProducts.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -753,6 +765,20 @@ const paginatedMovements = movements.slice(
           <span>{products.length} produtos</span>
         </div>
 
+        <input
+          type="text"
+          placeholder="Pesquisar por SKU, nome ou categoria..."
+          value={search}
+          onChange={e => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          style={{
+            width: '100%',
+            marginBottom: '16px'
+          }}
+        />
+
         <table>
           <thead>
             <tr>
@@ -767,7 +793,24 @@ const paginatedMovements = movements.slice(
           </thead>
 
           <tbody>
-            {paginatedProducts.map(product => {
+            {filteredProducts.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  style={{
+                    color: '#dc2626',
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    padding: '16px'
+                  }}
+                >
+                  {search.trim()
+                    ? 'Nenhum produto encontrado para essa pesquisa.'
+                    : 'Nenhum produto cadastrado no estoque.'}
+                </td>
+              </tr>
+            ) : (
+              paginatedProducts.map(product => {
               const lowStock =
                 product.stock_quantity <= product.minimum_stock;
 
@@ -824,62 +867,64 @@ const paginatedMovements = movements.slice(
                     </div>
                   </td>
                 </tr>
-              );
-            })}
+               );
+            })
+          )}
           </tbody>
         </table>
 
-        {products.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '12px',
-              flexWrap: 'wrap',
-              marginTop: '16px'
-            }}
+    {filteredProducts.length > 0 && (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap',
+          marginTop: '16px'
+        }}
+      >
+        <span>
+          Página {currentPage} de {totalPages}
+          {' — '}Exibindo{' '}
+          {(currentPage - 1) * itemsPerPage + 1}
+          {' a '}
+          {Math.min(
+            currentPage * itemsPerPage,
+            filteredProducts.length
+          )}
+          {' de '}
+          {filteredProducts.length} produto(s)
+        </span>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            type="button"
+            className="outline"
+            onClick={() =>
+              setCurrentPage(page => Math.max(1, page - 1))
+            }
+            disabled={currentPage <= 1}
           >
-            <span>
-              Página {currentPage} de {totalPages}
-              {' — '}Exibindo{' '}
-              {(currentPage - 1) * itemsPerPage + 1}
-              {' a '}
-              {Math.min(
-                currentPage * itemsPerPage,
-                products.length
-              )}
-              {' de '}
-              {products.length} produto(s)
-            </span>
+            Anterior
+          </button>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                className="outline"
-                onClick={() =>
-                  setCurrentPage(page => Math.max(1, page - 1))
-                }
-                disabled={currentPage <= 1}
-              >
-                Anterior
-              </button>
+          <button
+            type="button"
+            className="outline"
+            onClick={() =>
+              setCurrentPage(page =>
+                Math.min(totalPages, page + 1)
+              )
+            }
+            disabled={currentPage >= totalPages}
+          >
+            Próxima
+          </button>
+        </div>
+      </div>
+    )}
 
-              <button
-                type="button"
-                className="outline"
-                onClick={() =>
-                  setCurrentPage(page =>
-                    Math.min(totalPages, page + 1)
-                  )
-                }
-                disabled={currentPage >= totalPages}
-              >
-                Próxima
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="panel stock-history">
@@ -1020,7 +1065,7 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   const [secondPaymentAmount, setSecondPaymentAmount] = useState('');
   const [services, setServices] = useState<any[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
-
+  
   const [items, setItems] = useState<
     {
       productId: number;
@@ -2837,22 +2882,29 @@ const paginatedSales = filteredSales.slice(
 function Customers() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [search, setSearch] = useState('');
+  const filteredCustomers = customers.filter(customer => {
+  const term = search.trim().toLowerCase();
+
+    return (
+      String(customer.name ?? '').toLowerCase().includes(term) ||
+      String(customer.phone ?? '').toLowerCase().includes(term) ||
+      String(customer.email ?? '').toLowerCase().includes(term)
+    );
+  });
 
   const totalPages = Math.max(
     1,
-    Math.ceil(customers.length / itemsPerPage)
+    Math.ceil(filteredCustomers.length / itemsPerPage)
   );
 
-  const paginatedCustomers = customers.slice(
+  const paginatedCustomers = filteredCustomers.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
-
- 
+  
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -2949,6 +3001,20 @@ function Customers() {
               : `${customers.length} cliente(s)`}
           </span>
         </div>
+              
+          <input
+            type="text"
+            placeholder="Pesquisar cliente por nome, telefone ou e-mail..."
+            value={search}
+            onChange={e => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              width: '100%',
+              marginBottom: '16px'
+            }}
+          />
 
               <div style={{ marginBottom: '24px' }}>
         <h4>Novo cliente</h4>
@@ -2992,12 +3058,24 @@ function Customers() {
           )}
         </div>
       </div>
-
+        
         {loading ? (
           <p>Carregando clientes...</p>
-        ) : customers.length === 0 ? (
-          <p>Nenhum cliente cadastrado.</p>
+        ) : filteredCustomers.length === 0 ? (
+          <p
+            style={{
+              color: '#dc2626',
+              fontWeight: 'bold',
+              textAlign: 'center',
+              margin: '16px 0'
+            }}
+          >
+            {search.trim()
+              ? 'Nenhum cliente encontrado para essa pesquisa.'
+              : 'Nenhum cliente cadastrado.'}
+          </p>
         ) : (
+
           <table>
             <thead>
               <tr>
@@ -3086,20 +3164,34 @@ function Customers() {
 function Suppliers() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [search, setSearch] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+
+  const filteredSuppliers = suppliers.filter(supplier => {
+    const term = search.trim().toLowerCase();
+
+    return (
+      String(supplier.name ?? '').toLowerCase().includes(term) ||
+      String(supplier.phone ?? '').toLowerCase().includes(term) ||
+      String(supplier.email ?? '').toLowerCase().includes(term) ||
+      String(supplier.address ?? '').toLowerCase().includes(term) ||
+      String(supplier.cnpj ?? '').toLowerCase().includes(term)
+    );
+  });
+
   const totalPages = Math.max(
     1,
-    Math.ceil(suppliers.length / itemsPerPage)
+    Math.ceil(filteredSuppliers.length / itemsPerPage)
   );
 
-  const paginatedSuppliers = suppliers.slice(
+  const paginatedSuppliers = filteredSuppliers.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
 
 
   const [open, setOpen] = useState(false);
@@ -3145,6 +3237,20 @@ function Suppliers() {
           <h3>Fornecedores</h3>
           <span>{suppliers.length} cadastrado(s)</span>
         </div>
+        
+        <input
+          type="text"
+          placeholder="Pesquisar por nome, telefone, e-mail, endereço ou CNPJ..."
+          value={search}
+          onChange={e => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          style={{
+            width: '100%',
+            marginBottom: '16px'
+          }}
+        />
 
         {loading ? (
           <p>Carregando...</p>
@@ -3159,23 +3265,39 @@ function Suppliers() {
                 <th>CNPJ</th>
               </tr>
             </thead>
+           
+        <tbody>
+          {filteredSuppliers.length === 0 ? (
+            <tr>
+              <td
+                colSpan={5}
+                style={{
+                  textAlign: 'center',
+                  padding: '20px'
+                }}
+              >
+                {search.trim()
+                  ? 'Nenhum fornecedor encontrado para essa pesquisa.'
+                  : 'Nenhum fornecedor cadastrado.'}
+              </td>
+            </tr>
+          ) : (
+            paginatedSuppliers.map(supplier => (
+              <tr key={supplier.id}>
+                <td>{supplier.name}</td>
+                <td>{supplier.phone ?? '—'}</td>
+                <td>{supplier.email ?? '—'}</td>
+                <td>{supplier.address ?? '—'}</td>
+                <td>{supplier.cnpj ?? '—'}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
 
-            <tbody>
-              {paginatedSuppliers.map(supplier => (
-                <tr key={supplier.id}>
-                  <td>{supplier.name}</td>
-                  <td>{supplier.phone ?? '—'}</td>
-                  <td>{supplier.email ?? '—'}</td>
-                  <td>{supplier.address ?? '—'}</td>
-                  <td>{supplier.cnpj ?? '—'}</td>
-                </tr>
-              ))}
-            
-            </tbody>
           </table>
         )}
 
-        {!loading && suppliers.length > 0 && (
+        {!loading && filteredSuppliers.length > 0 && (
           <div
             style={{
               display: 'flex',
@@ -3321,16 +3443,30 @@ function Services() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  const [search, setSearch] = useState('');
+
+  const filteredServices = services.filter(service => {
+    const term = search.trim().toLowerCase();
+
+    return (
+      String(service.name ?? '')
+        .toLowerCase()
+        .includes(term) ||
+      String(service.description ?? '')
+        .toLowerCase()
+        .includes(term)
+    );
+  });
+
   const totalPages = Math.max(
     1,
-    Math.ceil(services.length / itemsPerPage)
+    Math.ceil(filteredServices.length / itemsPerPage)
   );
 
-  const paginatedServices = services.slice(
+  const paginatedServices = filteredServices.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
-
 
   const [open, setOpen] = useState(false);
   const [editingService, setEditingService] = useState<any | null>(null);
@@ -3419,12 +3555,37 @@ function Services() {
             {services.length} serviço(s)
           </span>
         </div>
+        
+        <input
+          type="text"
+          placeholder="Pesquisar serviço por nome ou descrição..."
+          value={search}
+          onChange={e => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          style={{
+            width: '40%',
+            marginBottom: '16px'
+          }}
+        />
 
         {loading ? (
-          <p>Carregando serviços...</p>
-        ) : services.length === 0 ? (
-          <p>Nenhum serviço cadastrado.</p>
-        ) : (
+            <p>Carregando serviços...</p>
+          ) : filteredServices.length === 0 ? (
+            <p
+              style={{
+                color: '#dc2626',
+                fontWeight: 'bold',
+                textAlign: 'center',
+                margin: '16px 0'
+              }}
+            >
+              {search.trim()
+                ? 'Nenhum serviço encontrado para essa pesquisa.'
+                : 'Nenhum serviço cadastrado.'}
+            </p>
+          ) : (
           <table>
             <thead>
               <tr>
