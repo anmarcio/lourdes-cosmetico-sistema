@@ -344,13 +344,14 @@ app.post('/api/customers', async (req, res) => {
 
 app.post('/api/products', upload.single('image'), async (req, res) => {
   const {
-    name,
-    category,
-    supplierId,
-    price,
-    stockQuantity = 0,
-    minimumStock = 0
-  } = req.body;
+  name,
+  description,
+  category,
+  supplierId,
+  price,
+  stockQuantity = 0,
+  minimumStock = 0
+} = req.body;
 
   if (!name || price == null) {
     return res.status(400).json({
@@ -366,6 +367,7 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
     INSERT INTO products (
       sku,
       name,
+      description,
       category,
       supplier_id,
       price,
@@ -390,18 +392,20 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
       $4,
       $5,
       $6,
-      $7
+      $7,
+      $8
     FROM products
     RETURNING *
   `, [
-    name,
-    category ?? null,
-    supplierId ? Number(supplierId) : null,
-    price,
-    stockQuantity,
-    minimumStock,
-    imageUrl
-  ]);
+     name,
+      description?.trim() || null,
+      category ?? null,
+      supplierId ? Number(supplierId) : null,
+      price,
+      stockQuantity,
+      minimumStock,
+      imageUrl
+     ]);
 
   res.status(201).json(rows[0]);
 });
@@ -412,6 +416,7 @@ app.put('/api/products/:id', upload.single('image'), async (req, res) => {
 
     const {
       name,
+      description,
       category,
       supplierId,
       price,
@@ -435,16 +440,18 @@ app.put('/api/products/:id', upload.single('image'), async (req, res) => {
       UPDATE products
       SET
         name = $1,
-        category = $2,
-        supplier_id = $3,
-        price = $4,
-        stock_quantity = $5,
-        minimum_stock = $6,
+        description = $2,
+        category = $3,
+        supplier_id = $4,
+        price = $5,
+        stock_quantity = $6,
+        minimum_stock = $7,
         updated_at = NOW()
     `;
 
     const values: any[] = [
       name,
+      description?.trim() || null,
       category || null,
       supplierId ? Number(supplierId) : null,
       Number(price),
@@ -456,7 +463,7 @@ app.put('/api/products/:id', upload.single('image'), async (req, res) => {
       const imageUrl = `/uploads/products/${req.file.filename}`;
 
       query += `,
-        image_url = $7
+        image_url = $8
       `;
 
       values.push(imageUrl);
@@ -1571,20 +1578,42 @@ app.post('/api/sales/:id/credit-receipts', async (req, res) => {
 });
 
 app.get('/api/public/products', async (_req, res) => {
-  const { rows } = await pool.query(`
-    SELECT
-      id,
-      name,
-      category,
-      price,
-      stock_quantity,
-      image_url
-    FROM products
-    WHERE active = TRUE
-    ORDER BY name
-  `);
+  try {
+    const { rows } = await pool.query(`
+     SELECT
+        id,
+        name,
+        description,
+        category,
+        price,
+        image_url,
+        (stock_quantity > 0) AS available
+      FROM products
+      WHERE active = TRUE
+      ORDER BY name
+    `);
 
-  res.json(rows);
+    res.json(rows);
+  } catch (error) {
+    console.error('Erro ao carregar produtos públicos:', error);
+
+    res.status(500).json({
+      error: 'Erro ao carregar produtos da vitrine.'
+    });
+  }
+});
+
+app.get('/api/public/whatsapp', (_req, res) => {
+  const phone = (process.env.WHATSAPP_NUMBER || '')
+    .replace(/\D/g, '');
+
+  if (!phone) {
+    return res.status(503).json({
+      error: 'Número do WhatsApp não configurado.'
+    });
+  }
+
+  return res.json({ phone });
 });
 
 app.listen(port, () => {

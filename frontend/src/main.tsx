@@ -6,7 +6,18 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import './styles.css';
 
-type Product = { id:number; sku:string; name:string; supplier_name:string|null; category:string|null; price:number|string; stock_quantity:number; minimum_stock:number; active:boolean };
+type Product = {
+  id: number;
+  sku: string;
+  name: string;
+  description?: string | null;
+  supplier_name: string | null;
+  category: string | null;
+  price: number | string;
+  stock_quantity: number;
+  minimum_stock: number;
+  active: boolean;
+};
 const API = 'http://localhost:3000/api';
 
 function App() {
@@ -80,6 +91,48 @@ function Storefront() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [selectedBrand, setSelectedBrand] = useState('Todos');
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+
+const brands = [
+  'Todos',
+  'Avon',
+  'O Boticário',
+  'Eudora',
+  'Natura',
+  'Diversos',
+  'Cestas de Presentes'
+];
+
+const filteredProducts = products.filter(product => {
+  const term = searchTerm.trim().toLowerCase();
+
+  const matchesSearch = String(product.name || '')
+    .toLowerCase()
+    .includes(term);
+
+  const category = String(product.category || '')
+    .trim()
+    .toLowerCase();
+
+  let matchesBrand = true;
+
+  if (selectedBrand !== 'Todos') {
+    if (selectedBrand === 'O Boticário') {
+      matchesBrand =
+        category === 'o boticário' ||
+        category === 'boticário' ||
+        category === 'oboticário';
+    } else {
+      matchesBrand = category === selectedBrand.toLowerCase();
+    }
+  }
+
+  return matchesSearch && matchesBrand;
+});
+
   useEffect(() => {
     const loadProducts = async () => {
       try {
@@ -115,6 +168,26 @@ function Storefront() {
 
     loadProducts();
   }, []);
+  
+  useEffect(() => {
+    const loadWhatsApp = async () => {
+      try {
+        const response = await fetch(`${API}/public/whatsapp`);
+
+        if (!response.ok) {
+          throw new Error('Não foi possível carregar o WhatsApp.');
+        }
+
+        const data = await response.json();
+        setWhatsappPhone(data.phone || '');
+      } catch (error) {
+        console.error('Erro ao carregar WhatsApp:', error);
+        setWhatsappPhone('');
+      }
+    };
+
+    loadWhatsApp();
+  }, []);
 
   return (
     <section>
@@ -147,15 +220,69 @@ function Storefront() {
       </div>
 
       <div className="panel">
-        <div className="panel-title">
-          <h3>
-            Produtos disponíveis
-          </h3>
+         <div className="panel-title">
+            <h3>Produtos disponíveis</h3>
 
-          <span>
-            {products.length} produto(s)
-          </span>
-        </div>
+            <span>
+              {filteredProducts.length} produto(s)
+            </span>
+          </div>
+
+          <div style={{ marginTop: '20px', marginBottom: '24px' }}>
+            <h3 style={{ marginBottom: '8px' }}>
+              Lourdes Cosmético e Utilidades
+            </h3>
+
+            <p style={{ marginTop: 0, color: '#6b7280' }}>
+              Encontre seus produtos favoritos por marca.
+            </p>
+
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}
+            >
+              {brands.map(brand => (
+                <button
+                  key={brand}
+                  type="button"
+                  onClick={() => setSelectedBrand(brand)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '24px',
+                    border: '1px solid #166534',
+                    background: selectedBrand === brand ? '#166534' : '#fff',
+                    color: selectedBrand === brand ? '#fff' : '#166534',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  {brand}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Pesquisar produto pelo nome..."
+              aria-label="Pesquisar produtos pelo nome"
+              style={{
+                width: '100%',
+                maxWidth: '450px',
+                padding: '12px 16px',
+                border: '1px solid #d1d5db',
+                borderRadius: '10px',
+                fontSize: '16px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
 
         {loading ? (
           <p>
@@ -165,82 +292,278 @@ function Storefront() {
           <p>
             {error}
           </p>
-        ) : products.length === 0 ? (
+        ) : filteredProducts.length === 0 ? (
           <p>
             Nenhum produto disponível.
           </p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Produto</th>
-                <th>Categoria</th>
-                <th>Preço</th>
-                <th>Disponibilidade</th>
-              </tr>
-            </thead>
+             
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: '20px',
+              marginTop: '20px'
+            }}
+          >
+            {filteredProducts.map(product => (
+              <div
+                key={product.id}
+                onClick={() => setSelectedProduct(product)}
+                style={{
+                  cursor: 'pointer',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  background: '#fff',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}
+              >
+                {product.image_url ? (
+                  <img
+                    src={`${API.replace('/api', '')}${product.image_url}`}
+                    alt={product.name}
+                    style={{
+                      width: '100%',
+                      height: '200px',
+                      objectFit: 'contain',
+                      background: '#f9fafb',
+                      padding: '12px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      height: '200px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: '#f3f4f6',
+                      color: '#6b7280'
+                    }}
+                  >
+                    Sem foto
+                  </div>
+                )}
 
-            <tbody>
-              {products.map(product => (
-                <tr key={product.id}>
-                  
-                  <td>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-    {product.image_url ? (
-      <img
-        src={`${API.replace('/api', '')}${product.image_url}`}
-        alt={product.name}
-        style={{
-          width: '60px',
-          height: '60px',
-          objectFit: 'cover',
-          borderRadius: '8px'
-        }}
-      />
-    ) : (
-      <div
-        style={{
-          width: '60px',
-          height: '60px',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#f1f1f1',
-          fontSize: '12px'
-        }}
-      >
-        Sem foto
-      </div>
-    )}
+                <div
+                  style={{
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    flex: 1
+                  }}
+                >
+                  <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                    {product.category ?? 'Sem categoria'}
+                  </span>
 
-    <b>
-      {product.name}
-    </b>
-  </div>
-</td>
+                  <h4 style={{ margin: 0 }}>{product.name}</h4>
 
-                  <td>
-                    {product.category ?? '—'}
-                  </td>
+                  <strong style={{ fontSize: '22px', color: '#166534' }}>
+                    {Number(product.price).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL'
+                    })}
+                  </strong>
+                             
+                    
+                  <span
+                    className="badge"
+                    style={{
+                      alignSelf: 'flex-start',
+                      backgroundColor: product.available ? '#dcfce7' : '#fee2e2',
+                      color: product.available ? '#166534' : '#991b1b',
+                      padding: '6px 10px',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    {product.available
+                      ? 'Disponível'
+                      : 'Produto indisponível no momento'}
+                  </span>
 
-                  <td>
-                    R$ {Number(product.price)
-                      .toFixed(2)
-                      .replace('.', ',')}
-                  </td>
 
-                  <td>
-                    <span className="badge">
-                      Disponível
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </div>
+              </div>
+            ))}
+          </div>
+  
         )}
       </div>
+
+              {selectedProduct && (
+        <div
+          onClick={() => setSelectedProduct(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(255, 255, 255, 0.15)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            zIndex: 9999
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              background: '#fff',
+              border: '2px solid #166534',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.18)',
+              borderRadius: '16px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '800px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxSizing: 'border-box'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedProduct(null)}
+              aria-label="Fechar produto"
+              style={{
+              position: 'absolute',
+              top: '12px',
+              right: '12px',
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #d1d5db',
+              background: '#ffffff',
+              color: '#111827',
+              borderRadius: '50%',
+              width: '42px',
+              height: '42px',
+              fontSize: '28px',
+              fontWeight: 700,
+              lineHeight: 1,
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+            }}
+            >
+              ×
+            </button>
+
+            {selectedProduct.image_url ? (
+              <img
+                src={`${API.replace('/api', '')}${selectedProduct.image_url}`}
+                alt={selectedProduct.name}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  height: 'min(55vh, 500px)',
+                  objectFit: 'contain',
+                  background: '#f9fafb',
+                  borderRadius: '12px',
+                  marginBottom: '20px'
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  height: '250px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#f3f4f6',
+                  borderRadius: '12px',
+                  marginBottom: '20px'
+                }}
+              >
+                Sem foto
+              </div>
+            )}
+
+            <p style={{ color: '#6b7280', margin: '0 0 8px' }}>
+              {selectedProduct.category ?? 'Sem categoria'}
+            </p>
+
+            <h2 style={{ margin: '0 0 16px' }}>
+              {selectedProduct.name}
+            </h2>
+
+            <strong style={{ fontSize: '28px', color: '#166534' }}>
+              {Number(selectedProduct.price).toLocaleString('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+              })}
+            </strong>
+            <div>
+              {selectedProduct.description?.trim() && (
+                <div
+                  style={{
+                    marginTop: '12px',
+                    paddingTop: '10px',
+                    borderTop: '1px solid #e5e7eb'
+                  }}
+                >
+                  <h3 style={{ margin: '0 0 6px', fontSize: '15px' }}>
+                    Descrição do produto
+                  </h3>
+
+                  <p style={{ margin: '0 0 10px', color: '#4b5563' }}>
+                    {selectedProduct.description}
+                  </p>
+                </div>
+              )}
+              
+              <p style={{ margin: '10px 0 0', fontSize: '14px' }}>
+                <strong>Disponibilidade: </strong>
+                {selectedProduct.available
+                  ? 'Disponível'
+                  : 'Produto indisponível no momento'}
+              </p>
+              
+              {whatsappPhone ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const message = `Olá! Tenho interesse no produto ${selectedProduct.name}, no valor de R$ ${Number(selectedProduct.price).toFixed(2).replace('.', ',')}. Poderia me dar mais informações?`;
+
+                    const whatsappUrl =
+                      `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+
+                    window.open(
+                      whatsappUrl,
+                      '_blank',
+                      'noopener,noreferrer'
+                    );
+                  }}
+                  style={{
+                    marginTop: '16px',
+                    padding: '12px 18px',
+                    backgroundColor: '#25D366',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  Pedir pelo WhatsApp
+                </button>
+              ) : (
+                <p style={{ marginTop: '16px', color: '#6b7280' }}>
+                  WhatsApp indisponível no momento.
+                </p>
+              )}
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </section>
   );
 }
@@ -438,14 +761,15 @@ function ProductForm({
   product?: Product | null;
  }) {
 
-  const [form,setForm]=useState({
-  name:'',
-  category:'',
-  supplierId:'',
-  price:'',
-  stockQuantity:'0',
-  minimumStock:'0'
- });
+ const [form, setForm] = useState({
+  name: '',
+  description: '',
+  category: '',
+  supplierId: '',
+  price: '',
+  stockQuantity: '0',
+  minimumStock: '0'
+});
 
   const [categories, setCategories] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -473,7 +797,7 @@ function ProductForm({
       minimumStock: '0'
     });
   }
-
+  
   setImage(null);
 }, [product]);
 
@@ -497,6 +821,7 @@ const submit = async (e: React.FormEvent) => {
   const formData = new FormData();
 
   formData.append('name', form.name);
+  formData.append('description', form.description);
   formData.append('category', form.category);
   formData.append(
     'supplierId',
@@ -548,6 +873,15 @@ const submit = async (e: React.FormEvent) => {
         onChange={e=>setForm({...form,name:e.target.value})}
       />
 
+      <textarea
+        placeholder="Descrição do produto (opcional)"
+        value={form.description}
+        onChange={e =>
+          setForm({ ...form, description: e.target.value })
+        }
+        rows={4}
+      />
+
       <input
         type="file"
         accept="image/*"
@@ -566,18 +900,21 @@ const submit = async (e: React.FormEvent) => {
           </option>
          ))}
       </select>
-
+      
       <select
+        required
         value={form.category}
-        onChange={e=>setForm({...form,category:e.target.value})}
+        onChange={e =>
+          setForm({ ...form, category: e.target.value })
+        }
       >
-        <option value="">Selecione uma categoria</option>
-
-        {categories.map(category => (
-          <option key={category.id} value={category.name}>
-            {category.name}
-          </option>
-         ))}
+        <option value="">Selecione uma marca</option>
+        <option value="Avon">Avon</option>
+        <option value="O Boticário">O Boticário</option>
+        <option value="Eudora">Eudora</option>
+        <option value="Natura">Natura</option>
+        <option value="Diversos">Diversos</option>
+        <option value="Cestas de Presentes">Cestas de Presentes</option>
       </select>
 
       <input
@@ -3315,10 +3652,10 @@ function Suppliers() {
               {' a '}
               {Math.min(
                 currentPage * itemsPerPage,
-                suppliers.length
+                filteredSuppliers.length
               )}
               {' de '}
-              {suppliers.length} fornecedor(es)
+              {filteredSuppliers.length} fornecedor(es)
             </span>
 
             <div style={{ display: 'flex', gap: '8px' }}>
