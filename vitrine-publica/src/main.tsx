@@ -13,7 +13,7 @@ type Product = {
   available: boolean;
 };
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API = import.meta.env.VITE_API_URL || 'https://lourdes-vitrine-api.onrender.com/api';
 
 function App() {
   const [products, setProducts] = useState<Product[]>([]);
