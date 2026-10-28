@@ -12,3 +12,9 @@ coverage/
 
 # Arquivos temporários do TypeScript
 *.tsbuildinfo
+
+# Backup local do banco de dados
+lourdes_backup.dump
+
+# Backup antigo do frontend
+frontend-backup/

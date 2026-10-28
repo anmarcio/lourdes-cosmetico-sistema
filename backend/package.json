@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node --dns-result-order=ipv4first --import tsx --watch src/server.ts",
+    "dev:public": "node --dns-result-order=ipv4first --import tsx --watch src/public-server.ts",
     "build": "tsc",
     "start": "node dist/server.js"
   },
