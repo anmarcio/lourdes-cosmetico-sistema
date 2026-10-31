@@ -18,3 +18,8 @@ lourdes_backup.dump
 
 # Backup antigo do frontend
 frontend-backup/
+
+# Relatórios e arquivos de log
+audit-result.json
+npm-debug.log*
+*.log

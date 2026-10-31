@@ -18,16 +18,119 @@ type Product = {
   minimum_stock: number;
   active: boolean;
 };
-const API = 'http://localhost:3000/api';
+
+const API = import.meta.env.PROD
+  ? 'https://lourdes-vitrine-api.onrender.com/api'
+  : 'http://localhost:3000/api';
+
+async function apiFetch(
+  path: string,
+  options: RequestInit = {}
+) {
+  const token = sessionStorage.getItem('lourdes_token');
+
+  const headers = new Headers(options.headers);
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  return fetch(`${API}${path}`, {
+    ...options,
+    headers
+  });
+}
 
 function App() {
+  const [token, setToken] = useState<string | null>(
+    () => sessionStorage.getItem('lourdes_token')
+  );
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const [products, setProducts] = useState<Product[]>([]);
+
+
   const [tab, setTab] = useState('Dashboard');
   const [loading, setLoading] = useState(true);
-  const load = async () => { setLoading(true); try { const r = await fetch(`${API}/products`); setProducts(await r.json()); } finally { setLoading(false); } };
-  useEffect(() => { load(); }, []);
-  const low = products.filter(p => p.stock_quantity <= p.minimum_stock);
-  const menu = [
+
+  const handleLogin = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+    setLoginError('');
+    setLoginLoading(true);
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    const username = String(formData.get('username') || '').trim();
+    const password = String(formData.get('password') || '');
+
+    try {
+      const response = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setLoginError(data.error || 'Não foi possível realizar o login.');
+        return;
+      }
+
+      if (!data.token) {
+        setLoginError('O servidor não retornou um token de acesso.');
+        return;
+      }
+
+      sessionStorage.setItem('lourdes_token', data.token);
+      setToken(data.token);
+      form.reset();
+    } catch {
+      setLoginError('Não foi possível conectar ao servidor.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+ const load = async () => {
+  if (!token) {
+    setProducts([]);
+    setLoading(false);
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const r = await apiFetch('/products');
+
+    if (!r.ok) {
+      throw new Error('Não foi possível carregar os produtos.');
+    }
+
+    setProducts(await r.json());
+  } catch (error) {
+    console.error('Erro ao carregar produtos:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  useEffect(() => {
+    load();
+  }, [token]);
+
+  const low = products.filter(
+    p => p.stock_quantity <= p.minimum_stock
+  );
+
+    const menu = [
     ['Dashboard', LayoutDashboard],
     ['Produtos', Boxes],
     ['Estoque', RefreshCw],
@@ -38,6 +141,84 @@ function App() {
     ['Serviços', Scissors],
     ['Vitrine virtual', Store]
     ] as const;
+
+    if (!token) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px'
+      }}>
+        <form
+          onSubmit={handleLogin}
+          style={{
+            width: '100%',
+            maxWidth: '380px',
+            padding: '30px',
+            borderRadius: '12px',
+            background: '#ffffff',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.10)'
+          }}
+        >
+          <h1 style={{ marginTop: 0 }}>Lourdes</h1>
+          <p>Entre para acessar o sistema administrativo.</p>
+
+          <label htmlFor="login-username">Usuário</label>
+          <input
+            id="login-username"
+            name="username"
+            type="text"
+            autoComplete="username"
+            required
+            style={{
+              display: 'block',
+              width: '100%',
+              boxSizing: 'border-box',
+              margin: '8px 0 16px',
+              padding: '12px'
+            }}
+          />
+
+          <label htmlFor="login-password">Senha</label>
+          <input
+            id="login-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            style={{
+              display: 'block',
+              width: '100%',
+              boxSizing: 'border-box',
+              margin: '8px 0 16px',
+              padding: '12px'
+            }}
+          />
+
+          {loginError && (
+            <p style={{ color: '#c62828' }} role="alert">
+              {loginError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loginLoading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              cursor: loginLoading ? 'wait' : 'pointer'
+            }}
+          >
+            {loginLoading ? 'Entrando...' : 'Entrar'}
+          </button>
+        </form>
+      </div>
+    );
+  }  
+
   return <div className="app">
     <aside><div className="brand"><div className="logo">L</div><div><strong>Lourdes</strong><span>Cosmético e Utilidades</span></div></div>
       <nav>{menu.map(([name, Icon]) => <button className={tab===name?'active':''} onClick={()=>setTab(name)} key={name}><Icon size={18}/>{name}</button>)}</nav>
@@ -140,9 +321,11 @@ const filteredProducts = products.filter(product => {
         setError('');
 
         const response = await fetch(
-          `${API}/public/products`
+          `${API}/public/products`,
+          {
+            cache: 'no-store'
+          }
         );
-
         const data = await response.json();
 
         if (!response.ok) {
@@ -369,7 +552,7 @@ const filteredProducts = products.filter(product => {
                       currency: 'BRL'
                     })}
                   </strong>
-                             
+                          
                     
                   <span
                     className="badge"
@@ -777,19 +960,21 @@ function ProductForm({
 
    useEffect(() => {
   if (product) {
-    setForm({
-      name: product.name ?? '',
-      category: product.category ?? '',
-      supplierId: '',
-      price: product.price != null
-        ? String(product.price)
-        : '',
-      stockQuantity: String(product.stock_quantity ?? 0),
-      minimumStock: String(product.minimum_stock ?? 0)
-    });
+
+  setForm({
+    name: product.name ?? '',
+    description: product.description ?? '',
+    category: product.category ?? '',
+    supplierId: '',
+    price: String(product.price ?? ''),
+    stockQuantity: String(product.stock_quantity ?? 0),
+    minimumStock: String(product.minimum_stock ?? 0)
+  });
+
   } else {
     setForm({
       name: '',
+      description: '',
       category: '',
       supplierId: '',
       price: '',
@@ -801,18 +986,18 @@ function ProductForm({
   setImage(null);
 }, [product]);
 
-  useEffect(() => {
-    fetch(`${API}/categories`)
+    useEffect(() => {
+    apiFetch('/categories')
       .then(response => response.json())
       .then(data => setCategories(data))
       .catch(error => console.error('Erro ao carregar categorias:', error));
   }, []);
 
   useEffect(() => {
-  fetch(`${API}/suppliers`)
-    .then(response => response.json())
-    .then(data => setSuppliers(data))
-    .catch(error => console.error('Erro ao carregar fornecedores:', error));
+    apiFetch('/suppliers')
+      .then(response => response.json())
+      .then(data => setSuppliers(data))
+      .catch(error => console.error('Erro ao carregar fornecedores:', error));
   }, []);
 
 const submit = async (e: React.FormEvent) => {
@@ -835,10 +1020,10 @@ const submit = async (e: React.FormEvent) => {
     formData.append('image', image);
   }
 
-  const response = await fetch(
+  const response = await apiFetch(
     product
-      ? `${API}/products/${product.id}`
-      : `${API}/products`,
+    ? `/products/${product.id}`
+    : '/products',
     {
       method: product ? 'PUT' : 'POST',
       body: formData
@@ -1008,7 +1193,7 @@ const paginatedMovements = movements.slice(
     setLoading(true);
 
     try {
-      const response = await fetch(`${API}/stock/movements`);
+      const response = await apiFetch('/stock/movements');
       const data = await response.json();
       setMovements(data);
     } catch {
@@ -1048,7 +1233,7 @@ const paginatedMovements = movements.slice(
     );
 
     try {
-      const response = await fetch(`${API}/stock/movements`, {
+      const response = await apiFetch('/stock/movements', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1450,7 +1635,7 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
     setSalesLoading(true);
 
     try {
-      const response = await fetch(`${API}/sales`);
+      const response = await apiFetch('/sales');
       const data = await response.json();
 
       if (!response.ok) {
@@ -1475,7 +1660,7 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   setCustomersLoading(true);
 
   try {
-    const response = await fetch(`${API}/customers`);
+    const response = await apiFetch('/customers');
     const data = await response.json();
 
     if (!response.ok) {
@@ -1496,7 +1681,7 @@ function Sales({  products,  onUpdated }: {  products: Product[];  onUpdated: ()
   setServicesLoading(true);
 
   try {
-    const response = await fetch(`${API}/services`);
+    const response = await apiFetch('/services');
     const data = await response.json();
 
     if (!response.ok) {
@@ -1518,10 +1703,9 @@ const loadSaleDetails = async (saleId: number) => {
   setError('');
 
   try {
-    const response = await fetch(
-      `${API}/sales/${saleId}`
+    const response = await apiFetch(
+      `/sales/${saleId}`
     );
-
     const data = await response.json();
 
     if (!response.ok) {
@@ -1557,8 +1741,8 @@ const cancelSale = async (saleId: number) => {
   setMessage('');
 
   try {
-    const response = await fetch(
-      `${API}/sales/${saleId}/cancel`,
+    const response = await apiFetch(
+      `/sales/${saleId}/cancel`,
       {
         method: 'POST'
       }
@@ -1597,8 +1781,8 @@ const sendSaleReceipt = async (saleId: number) => {
   setSendingReceiptId(saleId);
 
   try {
-    const response = await fetch(
-      `${API}/sales/${saleId}/email-receipt`,
+    const response = await apiFetch(
+      `/sales/${saleId}/email-receipt`,
       {
         method: 'POST'
       }
@@ -1816,10 +2000,10 @@ const registerSale = async () => {
 
   setSaving(true);
     try {
-      const response = await fetch(
-        `${API}/sales`,
-        {
-          method: 'POST',
+      const response = await apiFetch(
+      '/sales',
+      {
+        method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
@@ -3253,7 +3437,7 @@ function Customers() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API}/customers`);
+      const response = await apiFetch('/customers');
       const data = await response.json();
 
       if (!response.ok) {
@@ -3282,7 +3466,7 @@ function Customers() {
   setSaving(true);
 
   try {
-    const response = await fetch(`${API}/customers`, {
+    const response = await apiFetch('/customers', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -3536,7 +3720,7 @@ function Suppliers() {
   const loadSuppliers = () => {
     setLoading(true);
 
-    fetch(`${API}/suppliers`)
+    apiFetch('/suppliers')
       .then(response => response.json())
       .then(data => {
         setSuppliers(data);
@@ -3703,9 +3887,9 @@ function SupplierForm({close,done}:{close:()=>void;done:()=>void}) {
   const submit = async (e:React.FormEvent) => {
     e.preventDefault();
 
-    await fetch(`${API}/suppliers`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+    await apiFetch('/suppliers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body:JSON.stringify({
         name:form.name,
         phone:form.phone,
@@ -3811,7 +3995,7 @@ function Services() {
   const loadServices = () => {
     setLoading(true);
 
-    fetch(`${API}/services`)
+    apiFetch('/services')
       .then(response => response.json())
       .then(data => {
         setServices(data);
@@ -3825,8 +4009,8 @@ function Services() {
 
   const toggleServiceStatus = async (service: any) => {
   try {
-    const response = await fetch(
-      `${API}/services/${service.id}/status`,
+    const response = await apiFetch(
+      `/services/${service.id}/status`,
       {
         method: 'PATCH'
       }
@@ -4100,10 +4284,10 @@ function ServiceForm({
 
     try {
      
-      const response = await fetch(
+      const response = await apiFetch(
         service
-          ? `${API}/services/${service.id}`
-          : `${API}/services`,
+          ? `/services/${service.id}`
+          : '/services',
         {
           method: service ? 'PUT' : 'POST',
           headers: {
@@ -4292,9 +4476,7 @@ function Fiados() {
     setError('');
 
     try {
-      const response = await fetch(
-        `${API}/credit-sales`
-      );
+      const response = await apiFetch('/credit-sales');
 
       const data = await response.json();
 
@@ -4397,8 +4579,8 @@ function Fiados() {
     setMessage('');
 
     try {
-      const response = await fetch(
-        `${API}/sales/${selectedSale.id}/credit-receipts`,
+      const response = await apiFetch(
+        `/sales/${selectedSale.id}/credit-receipts`,
         {
           method: 'POST',
           headers: {

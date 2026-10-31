@@ -6,10 +6,35 @@ import multer from 'multer';
 import { Pool } from 'pg';
 import nodemailer from 'nodemailer';
 import PDFDocument from 'pdfkit';
+import authRoutes from './auth/authRoutes.js';
+import { authMiddleware } from './auth/authMiddleware.js';
 
 
 const app = express();
+app.use(cors({ origin: process.env.CORS_ORIGIN ?? 'http://localhost:5173' }));
 app.use(express.json());
+app.use('/api/auth', authRoutes);
+
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) {
+    next();
+    return;
+  }
+
+  if (
+    req.path === '/api/health' ||
+    req.path.startsWith('/api/public/')
+  ) {
+    next();
+    return;
+  }
+
+  // O login já foi atendido pelo roteador acima.
+  // As demais rotas da API exigirão autenticação.
+  authMiddleware(req, res, next);
+});
+
 
 const port = Number(process.env.PORT ?? 3000);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -38,8 +63,6 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage
 });
-
-app.use(cors({ origin: process.env.CORS_ORIGIN ?? 'http://localhost:5174' }));
 
 app.use(
   '/uploads',
