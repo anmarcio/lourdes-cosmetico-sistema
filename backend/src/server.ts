@@ -11,14 +11,22 @@ import { authMiddleware } from './auth/authMiddleware.js';
 
 
 const app = express();
+
 const allowedOrigins = [
   'http://localhost:5174',
   'https://lourdes-vitrine-publica.netlify.app'
 ];
 
 app.use(cors({
-  origin: allowedOrigins
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Origem não permitida pelo CORS'));
+    }
+  }
 }));
+
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 
