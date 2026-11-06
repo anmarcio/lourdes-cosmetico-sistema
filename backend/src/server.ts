@@ -9,11 +9,12 @@ import PDFDocument from 'pdfkit';
 import authRoutes from './auth/authRoutes.js';
 import { authMiddleware } from './auth/authMiddleware.js';
 
-
 const app = express();
 
 const allowedOrigins = [
+  'http://localhost:5173',
   'http://localhost:5174',
+  'http://localhost:5175',
   'https://lourdes-vitrine-publica.netlify.app'
 ];
 
@@ -24,7 +25,9 @@ app.use(cors({
     } else {
       callback(new Error('Origem não permitida pelo CORS'));
     }
-  }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
