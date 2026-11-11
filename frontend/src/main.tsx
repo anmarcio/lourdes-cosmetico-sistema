@@ -19,9 +19,7 @@ type Product = {
   active: boolean;
 };
 
-const API = import.meta.env.PROD
-  ? 'https://lourdes-vitrine-api.onrender.com/api'
-  : 'http://localhost:3000/api';
+const API = 'https://lourdes-vitrine-api.onrender.com/api';
 
 async function apiFetch(
   path: string,
@@ -39,6 +37,233 @@ async function apiFetch(
     ...options,
     headers
   });
+}
+
+function AccessibilityButton() {
+  const [enabled, setEnabled] = useState(
+    () => localStorage.getItem('lourdes_accessibility') === 'true'
+  );
+
+  const [fontSize, setFontSize] = useState(
+    () => Number(localStorage.getItem('lourdes_font_size')) || 100
+  );
+
+  const [highContrast, setHighContrast] = useState(
+    () => localStorage.getItem('lourdes_high_contrast') === 'true'
+  );
+
+  const [speed, setSpeed] = useState(1);
+  const [reading, setReading] = useState(false);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle(
+      'accessibility-enabled',
+      enabled
+    );
+
+    document.documentElement.classList.toggle(
+      'high-contrast',
+      enabled && highContrast
+    );
+
+    document.documentElement.style.fontSize =
+      enabled ? `${fontSize}%` : '';
+
+    localStorage.setItem('lourdes_accessibility', String(enabled));
+    localStorage.setItem('lourdes_font_size', String(fontSize));
+    localStorage.setItem('lourdes_high_contrast', String(highContrast));
+  }, [enabled, fontSize, highContrast]);
+
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  function stopReading() {
+    window.speechSynthesis.cancel();
+    setReading(false);
+    setPaused(false);
+  }
+
+  function readText(text: string) {
+    const cleanText = text.trim();
+
+    if (!cleanText) {
+      alert('Não há texto disponível para leitura.');
+      return;
+    }
+
+    if (!('speechSynthesis' in window)) {
+      alert('Seu navegador não oferece suporte à leitura de voz.');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+
+    utterance.lang = 'pt-BR';
+    utterance.rate = speed;
+
+    utterance.onstart = () => {
+      setReading(true);
+      setPaused(false);
+    };
+
+    utterance.onend = () => {
+      setReading(false);
+      setPaused(false);
+    };
+
+    utterance.onerror = () => {
+      setReading(false);
+      setPaused(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function readPage() {
+    const main = document.querySelector('main');
+
+    const content = main
+      ? main.cloneNode(true) as HTMLElement
+      : document.body.cloneNode(true) as HTMLElement;
+
+    content.querySelectorAll(
+      'button, input, select, textarea, nav, header, aside, .accessibility-container, script, style'
+    ).forEach(element => element.remove());
+
+    const text = content.innerText || content.textContent || '';
+
+    readText(text);
+  }
+
+  function readSelection() {
+    const selectedText = window.getSelection()?.toString() || '';
+
+    if (!selectedText.trim()) {
+      alert('Selecione um texto na tela antes de iniciar a leitura.');
+      return;
+    }
+
+    readText(selectedText);
+  }
+
+  function togglePause() {
+    if (!reading) return;
+
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+      setPaused(false);
+    } else {
+      window.speechSynthesis.pause();
+      setPaused(true);
+    }
+  }
+
+  function resetAccessibility() {
+    stopReading();
+    setFontSize(100);
+    setHighContrast(false);
+    setSpeed(1);
+  }
+
+  return (
+    <div className="accessibility-container">
+      <button
+        type="button"
+        className="accessibility-button"
+        aria-expanded={enabled}
+        onClick={() => {
+          if (enabled) stopReading();
+          setEnabled(value => !value);
+        }}
+      >
+        ♿ Acessibilidade: {enabled ? 'Ligada' : 'Desligada'}
+      </button>
+
+      {enabled && (
+        <div className="accessibility-panel">
+          <strong>Opções de acessibilidade</strong>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setFontSize(size => Math.max(80, size - 10))}
+            >
+              A−
+            </button>
+
+            <span>{fontSize}%</span>
+
+            <button
+              type="button"
+              onClick={() => setFontSize(size => Math.min(150, size + 10))}
+            >
+              A+
+            </button>
+          </div>
+
+          <button
+            type="button"
+            aria-pressed={highContrast}
+            onClick={() => setHighContrast(value => !value)}
+          >
+            {highContrast ? 'Desativar' : 'Ativar'} alto contraste
+          </button>
+
+          <hr />
+
+          <strong>Leitura por voz</strong>
+
+          <button type="button" onClick={readPage}>
+            <span>🔊</span> Ler página
+          </button>
+
+          <button type="button" onClick={readSelection}>
+            Ler texto selecionado
+          </button>
+
+          <button
+            type="button"
+            onClick={togglePause}
+            disabled={!reading}
+          >
+            {paused ? 'Continuar leitura' : 'Pausar leitura'}
+          </button>
+
+          <button
+            type="button"
+            onClick={stopReading}
+            disabled={!reading}
+          >
+            Parar leitura
+          </button>
+
+          <label htmlFor="accessibility-speed">
+            Velocidade da leitura: {speed.toFixed(1)}x
+          </label>
+
+          <input
+            id="accessibility-speed"
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={speed}
+            onChange={event => setSpeed(Number(event.target.value))}
+          />
+
+          <button type="button" onClick={resetAccessibility}>
+            Restaurar padrão
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function App() {
@@ -142,8 +367,11 @@ function App() {
     ['Vitrine virtual', Store]
     ] as const;
 
-    if (!token) {
-    return (
+  if (!token) {
+     return (
+     <>
+      <AccessibilityButton />
+
       <div style={{
         minHeight: '100vh',
         display: 'flex',
@@ -216,10 +444,14 @@ function App() {
           </button>
         </form>
       </div>
+      </>
     );
-  }  
+  }
+  return (
+  <>
+    <AccessibilityButton />
 
-  return <div className="app">
+    <div className="app">
     <aside><div className="brand"><div className="logo">L</div><div><strong>Lourdes</strong><span>Cosmético e Utilidades</span></div></div>
       <nav>{menu.map(([name, Icon]) => <button className={tab===name?'active':''} onClick={()=>setTab(name)} key={name}><Icon size={18}/>{name}</button>)}</nav>
       <div className="side-note">Projeto Integrador II<br/><b>DRP01 — Turma 003</b></div>
@@ -246,8 +478,10 @@ function App() {
 ) : (
   <Dashboard products={products} low={low} loading={loading}/>
 )}
-    </main>
-  </div>
+      </main>
+    </div>
+  </>
+);
 }
 
 function Dashboard({products, low, loading}:{products:Product[];low:Product[];loading:boolean}) {
@@ -316,6 +550,7 @@ const filteredProducts = products.filter(product => {
 
   useEffect(() => {
     const loadProducts = async () => {
+       console.log('A função loadProducts foi executada!');
       try {
         setLoading(true);
         setError('');
@@ -335,6 +570,7 @@ const filteredProducts = products.filter(product => {
         }
 
         setProducts(data);
+        console.log('Produtos recebidos pela vitrine:', data.length, data);
 
       } catch (error) {
         console.error(error);

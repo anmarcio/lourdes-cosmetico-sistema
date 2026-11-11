@@ -23,3 +23,8 @@ frontend-backup/
 audit-result.json
 npm-debug.log*
 *.log
+
+# Backups de banco de dados
+*.dump
+*.sql
+*.backup

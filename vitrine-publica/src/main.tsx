@@ -15,6 +15,230 @@ type Product = {
 
 const API = import.meta.env.VITE_API_URL || 'https://lourdes-vitrine-api.onrender.com/api';
 
+function AccessibilityButton() {
+  const [enabled, setEnabled] = useState(
+    () => localStorage.getItem('lourdes_accessibility') === 'true'
+  );
+
+  const [fontSize, setFontSize] = useState(
+    () => Number(localStorage.getItem('lourdes_font_size')) || 100
+  );
+
+  const [highContrast, setHighContrast] = useState(
+    () => localStorage.getItem('lourdes_high_contrast') === 'true'
+  );
+
+  const [speed, setSpeed] = useState(1);
+  const [reading, setReading] = useState(false);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle(
+      'accessibility-enabled',
+      enabled
+    );
+
+    document.documentElement.classList.toggle(
+      'high-contrast',
+      enabled && highContrast
+    );
+
+    document.documentElement.style.fontSize =
+      enabled ? `${fontSize}%` : '';
+
+    localStorage.setItem('lourdes_accessibility', String(enabled));
+    localStorage.setItem('lourdes_font_size', String(fontSize));
+    localStorage.setItem('lourdes_high_contrast', String(highContrast));
+  }, [enabled, fontSize, highContrast]);
+
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  function stopReading() {
+    window.speechSynthesis.cancel();
+    setReading(false);
+    setPaused(false);
+  }
+
+  function readText(text: string) {
+    const cleanText = text.trim();
+
+    if (!cleanText) {
+      alert('Não há texto disponível para leitura.');
+      return;
+    }
+
+    if (!('speechSynthesis' in window)) {
+      alert('Seu navegador não oferece suporte à leitura de voz.');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'pt-BR';
+    utterance.rate = speed;
+
+    utterance.onstart = () => {
+      setReading(true);
+      setPaused(false);
+    };
+
+    utterance.onend = () => {
+      setReading(false);
+      setPaused(false);
+    };
+
+    utterance.onerror = () => {
+      setReading(false);
+      setPaused(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function readPage() {
+    const main = document.querySelector('main');
+
+    const content = main
+      ? main.cloneNode(true) as HTMLElement
+      : document.body.cloneNode(true) as HTMLElement;
+
+    content.querySelectorAll(
+      'button, input, select, textarea, nav, header, aside, .accessibility-container, script, style'
+    ).forEach(element => element.remove());
+
+    readText(content.innerText || content.textContent || '');
+  }
+
+  function readSelection() {
+    const selectedText = window.getSelection()?.toString() || '';
+
+    if (!selectedText.trim()) {
+      alert('Selecione um texto na tela antes de iniciar a leitura.');
+      return;
+    }
+
+    readText(selectedText);
+  }
+
+  function togglePause() {
+    if (!reading) return;
+
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+      setPaused(false);
+    } else {
+      window.speechSynthesis.pause();
+      setPaused(true);
+    }
+  }
+
+  function resetAccessibility() {
+    stopReading();
+    setFontSize(100);
+    setHighContrast(false);
+    setSpeed(1);
+  }
+
+  return (
+    <div className="accessibility-container">
+      <button
+        type="button"
+        className="accessibility-button"
+        aria-expanded={enabled}
+        onClick={() => {
+          if (enabled) stopReading();
+          setEnabled(value => !value);
+        }}
+      >
+        ♿ Acessibilidade: {enabled ? 'Ligada' : 'Desligada'}
+      </button>
+
+      {enabled && (
+        <div className="accessibility-panel">
+          <strong>Opções de acessibilidade</strong>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setFontSize(size => Math.max(80, size - 10))}
+            >
+              A−
+            </button>
+
+            <span>{fontSize}%</span>
+
+            <button
+              type="button"
+              onClick={() => setFontSize(size => Math.min(150, size + 10))}
+            >
+              A+
+            </button>
+          </div>
+
+          <button
+            type="button"
+            aria-pressed={highContrast}
+            onClick={() => setHighContrast(value => !value)}
+          >
+            {highContrast ? 'Desativar' : 'Ativar'} alto contraste
+          </button>
+
+          <hr />
+
+          <strong>Leitura por voz</strong>
+
+          <button type="button" onClick={readPage}>
+            🔊 Ler página
+          </button>
+
+          <button type="button" onClick={readSelection}>
+            Ler texto selecionado
+          </button>
+
+          <button
+            type="button"
+            onClick={togglePause}
+            disabled={!reading}
+          >
+            {paused ? 'Continuar leitura' : 'Pausar leitura'}
+          </button>
+
+          <button
+            type="button"
+            onClick={stopReading}
+            disabled={!reading}
+          >
+            Parar leitura
+          </button>
+
+          <label htmlFor="accessibility-speed">
+            Velocidade da leitura: {speed.toFixed(1)}x
+          </label>
+
+          <input
+            id="accessibility-speed"
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={speed}
+            onChange={event => setSpeed(Number(event.target.value))}
+          />
+
+          <button type="button" onClick={resetAccessibility}>
+            Restaurar padrão
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [phone, setPhone] = useState('');
@@ -91,7 +315,44 @@ function App() {
     );
   }
 
-  return (
+    function readProduct(product: Product) {
+    if (!('speechSynthesis' in window)) {
+      alert('Seu navegador não oferece suporte à leitura de voz.');
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const price = Number(product.price).toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
+
+    const text = [
+      `Produto: ${product.name}.`,
+      `Categoria: ${product.category || 'Sem categoria'}.`,
+      `Preço: ${price}.`,
+      product.description
+        ? `Descrição: ${product.description}.`
+        : '',
+      `Disponibilidade: ${
+        product.available
+          ? 'Disponível'
+          : 'Produto indisponível no momento'
+      }.`,
+    ].filter(Boolean).join(' ');
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'pt-BR';
+    utterance.rate = 1;
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+ return (
+  <>
+    <AccessibilityButton />
+
     <main className="store">
       <header className="hero">
         <div className="brand-title">
@@ -220,12 +481,43 @@ function App() {
 
             <span className="category">{selected.category || 'Sem categoria'}</span>
             <h2>{selected.name}</h2>
+
             <strong className="price">
               {Number(selected.price).toLocaleString('pt-BR', {
                 style: 'currency',
                 currency: 'BRL',
               })}
             </strong>
+
+            <div className="product-reading-controls">
+              <button
+                type="button"
+                onClick={() => readProduct(selected)}
+              >
+                🔊 Ouvir informações do produto
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.speechSynthesis.pause()}
+              >
+                ⏸ Pausar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.speechSynthesis.resume()}
+              >
+                ▶ Continuar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.speechSynthesis.cancel()}
+              >
+                ⏹ Parar
+              </button>
+            </div>
 
             {selected.description && <p className="description">{selected.description}</p>}
 
@@ -249,7 +541,8 @@ function App() {
           </section>
         </div>
       )}
-    </main>
+      </main>
+  </>
   );
 }
 
