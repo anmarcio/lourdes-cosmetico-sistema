@@ -536,6 +536,46 @@ app.put('/api/products/:id', upload.single('image'), async (req, res) => {
   }
 });
 
+app.patch('/api/products/:id/status', async (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return res.status(400).json({
+        error: 'ID do produto inválido'
+      });
+    }
+
+    const { rows } = await pool.query(`
+      UPDATE products
+      SET active = NOT active,
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, name, active
+    `, [productId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Produto não encontrado'
+      });
+    }
+
+    res.json({
+      message: rows[0].active
+        ? 'Produto ativado com sucesso'
+        : 'Produto inativado com sucesso',
+      product: rows[0]
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erro ao alterar status do produto'
+    });
+  }
+});
+
 app.get('/api/stock/alerts', async (_req, res) => {
   const { rows } = await pool.query(`
     SELECT id, sku, name, stock_quantity, minimum_stock

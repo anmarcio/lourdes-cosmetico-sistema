@@ -1010,6 +1010,36 @@ function Products({ products,
     setOpen(true);
   };
 
+  const handleDeleteProduct = async (product: Product) => {
+  const confirmed = window.confirm(
+    `Deseja realmente inativar o produto "${product.name}"? Ele deixará de aparecer na vitrine, mas seu histórico será preservado.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await apiFetch(
+        `/products/${product.id}/status`,
+        { method: 'PATCH' }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        window.alert(data.error || 'Erro ao inativar produto.');
+        return;
+      }
+
+      window.alert(data.message || 'Produto inativado com sucesso.');
+
+      onCreated();
+
+    } catch (error) {
+      console.error(error);
+      window.alert('Não foi possível conectar à API.');
+    }
+  };
+
   const handleClose = () => {
     setOpen(false);
     setEditingProduct(null);
@@ -1105,6 +1135,15 @@ function Products({ products,
                     onClick={() => handleEditProduct(p)}
                   >
                     Editar
+                  </button>
+
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => handleDeleteProduct(p)}
+                    style={{ marginLeft: '8px', color: '#dc2626' }}
+                  >
+                    Excluir
                   </button>
                 </td>
               </tr>
