@@ -111,6 +111,7 @@ app.get('/api/products', async (_req, res) => {
       p.image_url
     FROM products p
     LEFT JOIN suppliers s ON s.id = p.supplier_id
+    WHERE p.active = TRUE
     ORDER BY p.name
   `);
 
