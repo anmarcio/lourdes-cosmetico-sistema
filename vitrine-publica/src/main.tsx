@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Store, Search, MessageCircle, X } from 'lucide-react';
+import {  Store,  Search,  MessageCircle,  X,  Accessibility} from 'lucide-react';
 import './styles.css';
 
 type Product = {
@@ -16,9 +16,7 @@ type Product = {
 const API = import.meta.env.VITE_API_URL || 'https://lourdes-vitrine-api.onrender.com/api';
 
 function AccessibilityButton() {
-  const [enabled, setEnabled] = useState(
-    () => localStorage.getItem('lourdes_accessibility') === 'true'
-  );
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const [fontSize, setFontSize] = useState(
     () => Number(localStorage.getItem('lourdes_font_size')) || 100
@@ -33,34 +31,26 @@ function AccessibilityButton() {
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    document.documentElement.classList.toggle(
-      'accessibility-enabled',
-      enabled
-    );
+      document.documentElement.classList.toggle(
+        'high-contrast',
+        highContrast
+      );
 
-    document.documentElement.classList.toggle(
-      'high-contrast',
-      enabled && highContrast
-    );
+      document.documentElement.style.fontSize = `${fontSize}%`;
 
-    document.documentElement.style.fontSize =
-      enabled ? `${fontSize}%` : '';
+      localStorage.setItem('lourdes_font_size', String(fontSize));
+      localStorage.setItem('lourdes_high_contrast', String(highContrast));
+    }, [fontSize, highContrast]);
+      useEffect(() => {
+      return () => {
+        window.speechSynthesis.cancel();
+      };
+    }, []);
 
-    localStorage.setItem('lourdes_accessibility', String(enabled));
-    localStorage.setItem('lourdes_font_size', String(fontSize));
-    localStorage.setItem('lourdes_high_contrast', String(highContrast));
-  }, [enabled, fontSize, highContrast]);
-
-  useEffect(() => {
-    return () => {
+    function stopReading() {
       window.speechSynthesis.cancel();
-    };
-  }, []);
-
-  function stopReading() {
-    window.speechSynthesis.cancel();
-    setReading(false);
-    setPaused(false);
+      setReading(false);
+      setPaused(false);
   }
 
   function readText(text: string) {
@@ -149,17 +139,24 @@ function AccessibilityButton() {
       <button
         type="button"
         className="accessibility-button"
-        aria-expanded={enabled}
-        onClick={() => {
-          if (enabled) stopReading();
-          setEnabled(value => !value);
-        }}
+        aria-label={
+          panelOpen
+            ? 'Fechar opções de acessibilidade'
+            : 'Abrir opções de acessibilidade'
+        }
+        aria-expanded={panelOpen}
+        aria-controls="accessibility-panel"
+        onClick={() => setPanelOpen(value => !value)}
       >
-        ♿ Acessibilidade: {enabled ? 'Ligada' : 'Desligada'}
+        <Accessibility size={38} strokeWidth={2.5} aria-hidden="true" />
       </button>
 
-      {enabled && (
-        <div className="accessibility-panel">
+      {panelOpen && (
+
+        <div
+          className="accessibility-panel"
+          id="accessibility-panel"
+        >
           <strong>Opções de acessibilidade</strong>
 
           <div>
@@ -247,6 +244,62 @@ function App() {
   const [selected, setSelected] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (selected) {
+      closeButtonRef.current?.focus();
+    } else {
+      previousFocusRef.current?.focus();
+    }
+  }, [selected]);
+
+    useEffect(() => {
+    if (!selected) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSelected(null);
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const modal = document.querySelector('.modal');
+
+        if (!modal) return;
+
+        const focusableElements = modal.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (
+          event.shiftKey &&
+          document.activeElement === firstElement
+        ) {
+          event.preventDefault();
+          lastElement.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement === lastElement
+        ) {
+          event.preventDefault();
+          firstElement.focus();
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selected]);
 
   const brands = [
     'Todos',
@@ -349,12 +402,16 @@ function App() {
     window.speechSynthesis.speak(utterance);
   }
 
- return (
-  <>
-    <AccessibilityButton />
+   return (
+      <>
+        <AccessibilityButton />
 
-    <main className="store">
-      <header className="hero">
+        <a className="skip-link" href="#conteudo-principal">
+          Pular para o conteúdo principal
+        </a>
+
+        <main className="store" id="conteudo-principal" tabIndex={-1}>
+       <header className="hero">s
         <div className="brand-title">
           <Store size={34} />
           <div>
@@ -371,7 +428,9 @@ function App() {
             <span className="eyebrow">NOSSO CATÁLOGO</span>
             <h2>Produtos</h2>
           </div>
-          <span>{filtered.length} produto(s)</span>
+          <span aria-live="polite" aria-atomic="true">
+            {filtered.length} produto(s) encontrado(s)
+          </span>
         </div>
 
         <div className="filters">
@@ -379,6 +438,7 @@ function App() {
             <button
               key={item}
               className={brand === item ? 'filter active' : 'filter'}
+              aria-pressed={brand === item}
               onClick={() => setBrand(item)}
               type="button"
             >
@@ -388,8 +448,10 @@ function App() {
         </div>
 
         <label className="search">
+          <span className="sr-only">Pesquisar produtos pelo nome</span>
           <Search size={20} />
           <input
+            aria-label="Pesquisar produtos pelo nome"
             type="search"
             value={search}
             onChange={event => setSearch(event.target.value)}
@@ -407,10 +469,25 @@ function App() {
           <div className="products">
             {filtered.map(product => (
               <article
-                key={product.id}
-                className="product"
-                onClick={() => setSelected(product)}
-              >
+                  key={product.id}
+                  className="product"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Ver detalhes do produto ${product.name}`}
+                  onClick={event => {
+                    previousFocusRef.current = event.currentTarget;
+                    setSelected(product);
+                  }}
+                  onKeyDown={event => {
+                    if (event.target !== event.currentTarget) return;
+
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      previousFocusRef.current = event.currentTarget;
+                      setSelected(product);
+                    }
+                  }}
+                >
                 {product.image_url ? (
                   <img
                     className="product-image"
@@ -439,6 +516,7 @@ function App() {
                     className="details-button"
                     onClick={event => {
                       event.stopPropagation();
+                      previousFocusRef.current = event.currentTarget;
                       setSelected(product);
                     }}
                   >
@@ -459,8 +537,16 @@ function App() {
             aria-modal="true"
             aria-label={`Detalhes de ${selected.name}`}
             onClick={event => event.stopPropagation()}
+            onKeyDownCapture={event => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                setSelected(null);
+              }
+            }}
           >
-            <button
+           <button
+              ref={closeButtonRef}
               type="button"
               className="close-button"
               aria-label="Fechar"
