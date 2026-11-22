@@ -522,6 +522,8 @@ const brands = [
 ];
 
 const filteredProducts = products.filter(product => {
+  if (product.active === false) return false;
+
   const term = searchTerm.trim().toLowerCase();
 
   const matchesSearch = String(product.name || '')
@@ -2123,6 +2125,11 @@ const sendSaleReceipt = async (saleId: number) => {
       return;
     }
 
+    if (product.active !== true) {
+      setError('Este produto está inativo e não pode ser vendido.');
+      return;
+    }
+
     if (qty > product.stock_quantity) {
       setError(
         `Estoque insuficiente. Disponível: ${product.stock_quantity}.`
@@ -2588,6 +2595,7 @@ const paginatedSales = filteredSales.slice(
             {products
               .filter(
                 product =>
+                  product.active === true &&
                   product.stock_quantity > 0
               )
               .map(product => (

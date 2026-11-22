@@ -549,7 +549,7 @@ app.patch('/api/products/:id/status', async (req, res) => {
 
     const { rows } = await pool.query(`
       UPDATE products
-      SET active = NOT active,
+      SET active = FALSE,
           updated_at = NOW()
       WHERE id = $1
       RETURNING id, name, active
