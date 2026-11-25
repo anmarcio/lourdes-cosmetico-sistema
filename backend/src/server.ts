@@ -384,6 +384,48 @@ app.post('/api/customers', async (req, res) => {
   }
 });
 
+app.put('/api/customers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, email } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        error: 'Nome é obrigatório'
+      });
+    }
+
+    const { rows } = await pool.query(`
+      UPDATE customers
+      SET
+        name = $1,
+        phone = $2,
+        email = $3
+      WHERE id = $4
+      RETURNING id, name, phone, email, created_at
+    `, [
+      name.trim(),
+      phone?.trim() || null,
+      email?.trim() || null,
+      id
+    ]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Cliente não encontrado'
+      });
+    }
+
+    res.json(rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erro ao atualizar cliente'
+    });
+  }
+});
+
 app.post('/api/products', upload.single('image'), async (req, res) => {
   const {
   name,

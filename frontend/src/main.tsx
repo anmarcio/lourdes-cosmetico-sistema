@@ -32,11 +32,14 @@ async function apiFetch(
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
+    console.log('API:', API);
+  console.log('Caminho:', path);
+  console.log('URL completa:', `${API}${path}`);
 
   return fetch(`${API}${path}`, {
     ...options,
     headers
-  });
+  });   
 }
 
 function AccessibilityButton() {
@@ -484,20 +487,200 @@ function App() {
 );
 }
 
-function Dashboard({products, low, loading}:{products:Product[];low:Product[];loading:boolean}) {
-  return <section><div className="hero"><div><span className="eyebrow">TRANSFORMAÇÃO DIGITAL</span><h2>Controle da loja em um só lugar.</h2>
-  <p>Base inicial para estoque, vendas, clientes, fornecedores e vitrine virtual.</p></div><div className="hero-card"><Store/><b>Vitrine virtual</b>
-  <span>Atendimento via WhatsApp</span></div></div>
-  <div className="cards"><Card icon={<Boxes/>} label="Produtos cadastrados" value={String(products.length)}/>
-  <Card icon={<RefreshCw/>} label="Itens em estoque" value={String(products.reduce((a,p)=>a+p.stock_quantity,0))}/>
-  <Card icon={<AlertTriangle/>} label="Abaixo do mínimo" value={String(low.length)} warn/></div>
-  <div className="panel"><div className="panel-title"><h3>Estoque</h3><span>Visão inicial</span></div>
-  {loading?<p>Carregando...</p>:<table><thead><tr><th>SKU</th><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th><th>Status</th></tr></thead>
-  <tbody>{products.map(p=><tr key={p.id}><td>{p.sku}</td><td><b>{p.name}</b></td><td>{p.category??'—'}</td>
-  <td>R$ {Number(p.price).toFixed(2).replace('.',',')}</td><td>{p.stock_quantity}</td><td><span className={p.stock_quantity<=p.minimum_stock?'badge danger':'badge'}>
-    {p.stock_quantity<=p.minimum_stock?'Repor':'Normal'}</span></td></tr>)}</tbody></table>}</div>
-  </section>
+
+function Dashboard({
+  products,
+  low,
+  loading
+}: {
+  products: Product[];
+  low: Product[];
+  loading: boolean;
+}) {
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const itemsPerPage = 10;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(products.length / itemsPerPage)
+  );
+
+  // Mantém a página válida quando a quantidade de produtos muda
+  const safePage = Math.min(currentPage, totalPages);
+
+  const startIndex = (safePage - 1) * itemsPerPage;
+
+  const paginatedProducts = products.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
+
+  return (
+    <section>
+      <div className="hero">
+        <div>
+          <span className="eyebrow">
+            TRANSFORMAÇÃO DIGITAL
+          </span>
+
+          <h2>Controle da loja em um só lugar.</h2>
+
+          <p>
+            Base inicial para estoque, vendas, clientes,
+            fornecedores e vitrine virtual.
+          </p>
+        </div>
+
+        <div className="hero-card">
+          <Store />
+          <b>Vitrine virtual</b>
+          <span>Atendimento via WhatsApp</span>
+        </div>
+      </div>
+
+      <div className="cards">
+        <Card
+          icon={<Boxes />}
+          label="Produtos cadastrados"
+          value={String(products.length)}
+        />
+
+        <Card
+          icon={<RefreshCw />}
+          label="Itens em estoque"
+          value={String(
+            products.reduce(
+              (a, p) => a + p.stock_quantity,
+              0
+            )
+          )}
+        />
+
+        <Card
+          icon={<AlertTriangle />}
+          label="Abaixo do mínimo"
+          value={String(low.length)}
+          warn
+        />
+      </div>
+
+      <div className="panel">
+        <div className="panel-title">
+          <h3>Estoque</h3>
+          <span>Visão inicial</span>
+        </div>
+
+        {loading ? (
+          <p>Carregando...</p>
+        ) : (
+          <>
+            <table>
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Produto</th>
+                  <th>Categoria</th>
+                  <th>Preço</th>
+                  <th>Estoque</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {paginatedProducts.map(p => (
+                  <tr key={p.id}>
+                    <td>{p.sku}</td>
+                    <td><b>{p.name}</b></td>
+                    <td>{p.category ?? '—'}</td>
+
+                    <td>
+                      R$ {Number(p.price)
+                        .toFixed(2)
+                        .replace('.', ',')}
+                    </td>
+
+                    <td>{p.stock_quantity}</td>
+
+                    <td>
+                      <span
+                        className={
+                          p.stock_quantity <= p.minimum_stock
+                            ? 'badge danger'
+                            : 'badge'
+                        }
+                      >
+                        {p.stock_quantity <= p.minimum_stock
+                          ? 'Repor'
+                          : 'Normal'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {products.length > itemsPerPage && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  marginTop: '20px'
+                }}
+              >
+                <span>
+                  Mostrando {startIndex + 1}–
+                  {Math.min(
+                    startIndex + itemsPerPage,
+                    products.length
+                  )}{' '}
+                  de {products.length} produtos
+                </span>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="outline"
+                    disabled={safePage === 1}
+                    onClick={() =>
+                      setCurrentPage(safePage - 1)
+                    }
+                  >
+                    Anterior
+                  </button>
+
+                  <span>
+                    Página {safePage} de {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="outline"
+                    disabled={safePage === totalPages}
+                    onClick={() =>
+                      setCurrentPage(safePage + 1)
+                    }
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
 }
+
 function Card({icon,label,value,warn=false}:{icon:React.ReactNode;label:string;value:string;warn?:boolean}) { 
   return <div className={warn?'card warn':'card'}><div className="icon">{icon}</div><span>{label}</span><strong>{value}</strong></div> }
 
@@ -1079,13 +1262,6 @@ function Products({ products,
       <div className="toolbar">
         <p>Cadastro centralizado de produtos e preços.</p>
 
-        <input
-          type="text"
-          placeholder="Pesquisar produto, SKU ou categoria..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-
         <button onClick={handleNewProduct}>
           <Plus size={16} /> Novo produto
         </button>
@@ -1100,6 +1276,18 @@ function Products({ products,
       )}
 
       <div className="panel">
+        <div style={{ marginBottom: '16px' }}>
+          <input
+            type="text"
+            placeholder="Pesquisar produto, SKU ou categoria..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: '100%',
+              marginBottom: '16px'
+            }}
+          />
+        </div>
         <table>
           <thead>
             <tr>
@@ -1209,7 +1397,6 @@ function Products({ products,
     </section>
   );
 }
-
 
 function ProductForm({
   close,
@@ -3685,6 +3872,7 @@ const paginatedSales = filteredSales.slice(
 
 function Customers() {
   const [customers, setCustomers] = useState<any[]>([]);
+  const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -3749,17 +3937,22 @@ function Customers() {
   setSaving(true);
 
   try {
-    const response = await apiFetch('/customers', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        name,
-        phone,
-        email
-      })
-    });
+    const response = await apiFetch(
+      editingCustomer
+        ? `/customers/${editingCustomer.id}`
+        : '/customers',
+      {
+        method: editingCustomer ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name,
+          phone,
+          email
+        })
+      }
+    );
 
     const data = await response.json();
 
@@ -3769,13 +3962,19 @@ function Customers() {
       );
     }
 
-    setMessage('Cliente cadastrado com sucesso.');
+    setMessage(
+  editingCustomer
+    ? 'Cliente atualizado com sucesso.'
+    : 'Cliente cadastrado com sucesso.'
+      );
 
-    setName('');
-    setPhone('');
-    setEmail('');
+      setName('');
+      setPhone('');
+      setEmail('');
 
-    await loadCustomers();
+      setEditingCustomer(null);
+
+      await loadCustomers();
   } catch (error) {
     console.error(error);
 
@@ -3845,13 +4044,15 @@ function Customers() {
             onChange={e => setEmail(e.target.value)}
           />
 
-          <button
-            className="primary"
-            onClick={createCustomer}
-            disabled={saving}
-          >
-            {saving ? 'Cadastrando...' : 'Cadastrar cliente'}
-          </button>
+         <button
+          className="primary"
+          onClick={createCustomer}
+          disabled={saving}
+        >
+          {saving
+            ? (editingCustomer ? 'Salvando alterações...' : 'Cadastrando...')
+            : (editingCustomer ? 'Salvar alterações' : 'Cadastrar cliente')}
+        </button>
 
           {message && (
             <p>{message}</p>
@@ -3901,9 +4102,24 @@ function Customers() {
                       customer.created_at
                     ).toLocaleDateString('pt-BR')}
                   </td>
+
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCustomer(customer);
+                        setName(customer.name || '');
+                        setPhone(customer.phone || '');
+                        setEmail(customer.email || '');
+                        setMessage('');
+                        setError('');
+                      }}
+                    >
+                      Editar
+                    </button>
+                  </td>
                 </tr>
               ))}
-            
             </tbody>
           </table>
         )}
