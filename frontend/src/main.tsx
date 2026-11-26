@@ -1179,6 +1179,7 @@ function Products({ products,
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<any | null>(null);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -4180,9 +4181,9 @@ function Customers() {
   );
 }
 
-
 function Suppliers() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [editingSupplier, setEditingSupplier] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   
@@ -4247,8 +4248,12 @@ function Suppliers() {
 
       {open && (
         <SupplierForm
-          close={() => setOpen(false)}
+          close={() => {
+            setOpen(false);
+            setEditingSupplier(null);
+          }}
           done={loadSuppliers}
+          supplier={editingSupplier}
         />
       )}
 
@@ -4283,37 +4288,49 @@ function Suppliers() {
                 <th>E-mail</th>
                 <th>Endereço</th>
                 <th>CNPJ</th>
+                <th>Ações</th>
               </tr>
             </thead>
-           
-        <tbody>
-          {filteredSuppliers.length === 0 ? (
-            <tr>
-              <td
-                colSpan={5}
-                style={{
-                  textAlign: 'center',
-                  padding: '20px'
-                }}
-              >
-                {search.trim()
-                  ? 'Nenhum fornecedor encontrado para essa pesquisa.'
-                  : 'Nenhum fornecedor cadastrado.'}
-              </td>
-            </tr>
-          ) : (
-            paginatedSuppliers.map(supplier => (
-              <tr key={supplier.id}>
-                <td>{supplier.name}</td>
-                <td>{supplier.phone ?? '—'}</td>
-                <td>{supplier.email ?? '—'}</td>
-                <td>{supplier.address ?? '—'}</td>
-                <td>{supplier.cnpj ?? '—'}</td>
-              </tr>
-            ))
-          )}
-        </tbody>
 
+            <tbody>
+              {filteredSuppliers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    style={{
+                      textAlign: 'center',
+                      padding: '20px'
+                    }}
+                  >
+                    {search.trim()
+                      ? 'Nenhum fornecedor encontrado para essa pesquisa.'
+                      : 'Nenhum fornecedor cadastrado.'}
+                  </td>
+                </tr>
+              ) : (
+                paginatedSuppliers.map(supplier => (
+                  <tr key={supplier.id}>
+                    <td>{supplier.name}</td>
+                    <td>{supplier.phone ?? '—'}</td>
+                    <td>{supplier.email ?? '—'}</td>
+                    <td>{supplier.address ?? '—'}</td>
+                    <td>{supplier.cnpj ?? '—'}</td>
+
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSupplier(supplier);
+                          setOpen(true);
+                        }}
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
           </table>
         )}
 
@@ -4374,80 +4391,174 @@ function Suppliers() {
 }
 
 
-function SupplierForm({close,done}:{close:()=>void;done:()=>void}) {
-  const [form,setForm] = useState({
-    name:'',
-    phone:'',
-    email:'',
-    address:'',
-    cnpj:''
+function SupplierForm({
+  close,
+  done,
+  supplier
+}: {
+  close: () => void;
+  done: () => void;
+  supplier?: any | null;
+}) {
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    cnpj: ''
   });
 
-  const submit = async (e:React.FormEvent) => {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (supplier) {
+      setForm({
+        name: supplier.name ?? '',
+        phone: supplier.phone ?? '',
+        email: supplier.email ?? '',
+        address: supplier.address ?? '',
+        cnpj: supplier.cnpj ?? ''
+      });
+    } else {
+      setForm({
+        name: '',
+        phone: '',
+        email: '',
+        address: '',
+        cnpj: ''
+      });
+    }
+  }, [supplier]);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    await apiFetch('/suppliers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:JSON.stringify({
-        name:form.name,
-        phone:form.phone,
-        email:form.email,
-        address:form.address,
-        cnpj:form.cnpj
-      })
-    });
+    setError('');
 
-    close();
-    done();
+    if (!form.name.trim()) {
+      setError('Informe o nome do fornecedor.');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const response = await apiFetch(
+        supplier
+          ? `/suppliers/${supplier.id}`
+          : '/suppliers',
+        {
+          method: supplier ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: form.name,
+            phone: form.phone,
+            email: form.email,
+            address: form.address,
+            cnpj: form.cnpj
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Erro ao salvar fornecedor.'
+        );
+      }
+
+      await done();
+      close();
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Erro ao salvar fornecedor.'
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="panel">
       <div className="panel-title">
-        <h3>Novo fornecedor</h3>
+        <h3>
+          {supplier ? 'Editar fornecedor' : 'Novo fornecedor'}
+        </h3>
       </div>
 
-      <form onSubmit={submit}>
+      <form className="form" onSubmit={submit}>
         <input
           placeholder="Nome"
           value={form.name}
-          onChange={e=>setForm({...form,name:e.target.value})}
+          onChange={e =>
+            setForm({ ...form, name: e.target.value })
+          }
           required
         />
 
         <input
           placeholder="Telefone"
           value={form.phone}
-          onChange={e=>setForm({...form,phone:e.target.value})}
+          onChange={e =>
+            setForm({ ...form, phone: e.target.value })
+          }
         />
 
         <input
           type="email"
           placeholder="E-mail"
           value={form.email}
-          onChange={e=>setForm({...form,email:e.target.value})}
+          onChange={e =>
+            setForm({ ...form, email: e.target.value })
+          }
         />
 
         <input
           placeholder="Endereço"
           value={form.address}
-          onChange={e=>setForm({...form,address:e.target.value})}
+          onChange={e =>
+            setForm({ ...form, address: e.target.value })
+          }
         />
 
         <input
           placeholder="CNPJ"
           value={form.cnpj}
-          onChange={e=>setForm({...form,cnpj:e.target.value})}
+          onChange={e =>
+            setForm({ ...form, cnpj: e.target.value })
+          }
         />
 
+        {error && (
+          <p role="alert" style={{ color: '#dc2626' }}>
+            {error}
+          </p>
+        )}
+
         <div>
-          <button type="button" onClick={close}>
+          <button
+            type="button"
+            className="outline"
+            onClick={close}
+            disabled={saving}
+          >
             Cancelar
           </button>
 
-          <button type="submit">
-            Salvar fornecedor
+          <button type="submit" disabled={saving}>
+            {saving
+              ? 'Salvando...'
+              : supplier
+                ? 'Salvar alterações'
+                : 'Salvar fornecedor'}
           </button>
         </div>
       </form>
@@ -4550,9 +4661,13 @@ function Services() {
           </p>
         </div>
 
-        <button onClick={() => setOpen(true)}>
-          <Plus size={16} />
-          Novo serviço
+        <button
+          onClick={() => {
+            setEditingSupplier(null);
+            setOpen(true);
+          }}
+        >
+          <Plus size={16}/> Novo fornecedor
         </button>
       </div>
 
