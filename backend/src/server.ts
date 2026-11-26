@@ -181,6 +181,66 @@ app.post('/api/suppliers', async (req, res) => {
   }
 });
 
+app.put('/api/suppliers/:id', async (req, res) => {
+  try {
+    const supplierId = Number(req.params.id);
+
+    const {
+      name,
+      phone,
+      email,
+      address,
+      cnpj
+    } = req.body;
+
+    if (!Number.isInteger(supplierId) || supplierId <= 0) {
+      return res.status(400).json({
+        error: 'ID do fornecedor inválido'
+      });
+    }
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        error: 'Nome do fornecedor é obrigatório'
+      });
+    }
+
+    const { rows } = await pool.query(`
+      UPDATE suppliers
+      SET
+        name = $1,
+        phone = $2,
+        email = $3,
+        address = $4,
+        cnpj = $5
+      WHERE id = $6
+      RETURNING id, name, phone, email, address, cnpj
+    `, [
+      name.trim(),
+      phone?.trim() || null,
+      email?.trim() || null,
+      address?.trim() || null,
+      cnpj?.trim() || null,
+      supplierId
+    ]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Fornecedor não encontrado'
+      });
+    }
+
+    res.json(rows[0]);
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      error: 'Erro ao atualizar fornecedor'
+    });
+  }
+});
+
 app.get('/api/services', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
