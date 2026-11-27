@@ -4663,11 +4663,11 @@ function Services() {
 
         <button
           onClick={() => {
-            setEditingSupplier(null);
+            setEditingService(null);
             setOpen(true);
           }}
         >
-          <Plus size={16}/> Novo fornecedor
+          <Plus size={16}/> Novo serviço
         </button>
       </div>
 
