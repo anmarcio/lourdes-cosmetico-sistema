@@ -5,11 +5,19 @@
   "license": "ISC",
   "author": "",
   "type": "commonjs",
-  "main": "index.js",
+  "main": "electron/main.cjs",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
+    "app": "electron .",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/sql.js": "^1.16.1",
+    "electron": "^45.5.0"
+  },
+  "dependencies": {
+    "sql.js": "^1.17.0"
   }
 }
